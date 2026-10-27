@@ -8,16 +8,16 @@
 namespace ysm::proto::asset::model::data {
 
 enum class EasingType {
-    EASING_TYPE_NONE = 0,
-    EASING_TYPE_LINEAR = 1,
-    EASING_TYPE_CATMULLROM = 2,
+    kNone = 0,
+    kLinear = 1,
+    kCatmullrom = 2,
 };
 
 enum class LoopType {
-    LOOP_TYPE_UNSPECIFIED = 0,
-    LOOP_TYPE_LOOP = 1,
-    LOOP_TYPE_PLAY_ONCE = 2,
-    LOOP_TYPE_HOLD_ON_LAST_FRAME = 3,
+    kUnspecified = 0,
+    kLoop = 1,
+    kPlayOnce = 2,
+    kHoldOnLastFrame = 3,
 };
 
 struct ExpressionValue : public iguana::base_impl<ExpressionValue> {

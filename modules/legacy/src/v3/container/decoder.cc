@@ -1,20 +1,19 @@
 #include "decoder.h"
 
 #include <algorithm>
-#include <array>
 #include <bit>
 #include <cstddef>
 #include <iterator>
-#include <limits>
 #include <optional>
 #include <string_view>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
-#include <v3/codec/envelope.h>
+#include <codec/audio.h>
 #include <codec/mini_ogg.h>
 #include <err.h>
+#include <v3/codec/envelope.h>
 
 #include <v3/container/image.h>
 
@@ -709,185 +708,39 @@ struct SoundClassification {
     std::uint32_t channels{};
     std::uint32_t sample_rate{};
     std::uint64_t samples{};
-    std::string_view diagnostic;
+    std::string diagnostic;
 };
 
-std::uint32_t OggLe32(BufferViewR bytes) noexcept {
-    return static_cast<std::uint32_t>(bytes[0]) |
-           static_cast<std::uint32_t>(bytes[1]) << 8U |
-           static_cast<std::uint32_t>(bytes[2]) << 16U |
-           static_cast<std::uint32_t>(bytes[3]) << 24U;
-}
-
-std::uint64_t OggLe64(BufferViewR bytes) noexcept {
-    std::uint64_t result{};
-    for (std::size_t index = 8; index != 0; --index) {
-        result = (result << 8U) | bytes[index - 1];
-    }
-    return result;
-}
-
-std::optional<std::uint32_t> OpusPacketFrames(BufferViewR packet) {
-    if (packet.empty()) {
-        return std::nullopt;
-    }
-    const auto toc = packet[0];
-    const auto config = toc >> 3U;
-    constexpr std::array<std::uint32_t, 4> kSilkFrames{480, 960, 1920, 2880};
-    constexpr std::array<std::uint32_t, 2> kHybridFrames{480, 960};
-    constexpr std::array<std::uint32_t, 4> kCeltFrames{120, 240, 480, 960};
-    const auto samples_per_frame = config < 12   ? kSilkFrames[config & 3U]
-                                   : config < 16 ? kHybridFrames[config & 1U]
-                                                 : kCeltFrames[config & 3U];
-    std::uint32_t frame_count = 0;
-    switch (toc & 3U) {
-        case 0:
-            frame_count = 1;
-            break;
-        case 1:
-        case 2:
-            frame_count = 2;
-            break;
-        case 3:
-            if (packet.size() < 2) {
-                return std::nullopt;
-            }
-            frame_count = packet[1] & 0x3fU;
-            break;
-    }
-    const auto frames = samples_per_frame * frame_count;
-    if (frame_count == 0 || frames > 5'760) {
-        return std::nullopt;
-    }
-    return frames;
-}
-
-std::uint32_t OggCrc(BufferViewR page) {
-    std::uint32_t crc = 0;
-    for (std::size_t index = 0; index < page.size(); ++index) {
-        const auto value = index >= 22 && index < 26 ? Byte{0} : page[index];
-        crc ^= static_cast<std::uint32_t>(value) << 24U;
-        for (int bit = 0; bit < 8; ++bit) {
-            crc = (crc << 1U) ^
-                  ((crc & 0x80000000U) != 0 ? 0x04C11DB7U : 0U);
-        }
-    }
-    return crc;
-}
-
-struct OggTimeline {
-    std::uint64_t final_granule{};
-    std::uint64_t origin{};
-};
-
-std::optional<OggTimeline> InspectOggTimeline(BufferViewR bytes,
-                                              std::uint32_t serial,
-                                              bool opus) {
+bool FirstOggPacketHasPrefix(BufferViewR bytes, BufferViewR prefix) {
     constexpr BufferFixed<4> kOgg{'O', 'g', 'g', 'S'};
-    std::vector<Byte> packet;
-    std::uint64_t decoded_frames = 0;
-    std::uint64_t origin = 0;
-    bool has_origin = false;
-    bool saw_eos = false;
-    std::uint32_t expected_sequence = 0;
-    std::size_t packet_index = 0;
-
-    for (std::size_t offset = 0; offset < bytes.size();) {
-        const auto remaining = bytes.subspan(offset);
-        if (remaining.size() < 27 ||
-            !Cmp(Slice(remaining, 0, kOgg.size()), kOgg) ||
-            remaining[4] != 0 || (remaining[5] & ~0x07U) != 0 || saw_eos) {
-            return std::nullopt;
-        }
-        const auto segment_count = remaining[26];
-        const auto body_offset = 27U + segment_count;
-        if (body_offset > remaining.size()) {
-            return std::nullopt;
-        }
-        std::size_t body_size = 0;
-        for (std::size_t index = 0; index < segment_count; ++index) {
-            body_size += remaining[27 + index];
-        }
-        if (body_size > remaining.size() - body_offset) {
-            return std::nullopt;
-        }
-        const auto page_size = body_offset + body_size;
-        const auto page = remaining.first(page_size);
-        const auto flags = page[5];
-        if (OggLe32(Slice(page, 14, 4)) != serial ||
-            OggLe32(Slice(page, 18, 4)) != expected_sequence++ ||
-            ((flags & 0x01U) != 0) != !packet.empty() ||
-            (offset == 0 ? (flags & 0x02U) == 0 : (flags & 0x02U) != 0) ||
-            OggCrc(page) != OggLe32(Slice(page, 22, 4))) {
-            return std::nullopt;
-        }
-
-        std::uint64_t page_frames = 0;
-        auto cursor = body_offset;
-        for (std::size_t index = 0; index < segment_count; ++index) {
-            const auto size = page[27 + index];
-            packet.insert(packet.end(), page.begin() + cursor,
-                          page.begin() + cursor + size);
-            cursor += size;
-            if (size == std::numeric_limits<Byte>::max()) {
-                continue;
-            }
-            if (opus && packet_index >= 2) {
-                const auto frames = OpusPacketFrames(packet);
-                if (!frames ||
-                    decoded_frames >
-                        std::numeric_limits<std::uint64_t>::max() - *frames) {
-                    return std::nullopt;
-                }
-                decoded_frames += *frames;
-                page_frames += *frames;
-            }
-            ++packet_index;
-            packet.clear();
-        }
-
-        const auto granule = OggLe64(Slice(page, 6, 8));
-        if (opus && page_frames > 0 &&
-            granule != (std::numeric_limits<std::uint64_t>::max)()) {
-            if (!has_origin) {
-                if (granule < decoded_frames) {
-                    return std::nullopt;
-                }
-                origin = granule - decoded_frames;
-                has_origin = true;
-            }
-            const auto decoded_granule = origin + decoded_frames;
-            if ((flags & 0x04U) != 0) {
-                if (granule > decoded_granule ||
-                    decoded_granule - granule > page_frames) {
-                    return std::nullopt;
-                }
-            } else if (granule != decoded_granule) {
-                return std::nullopt;
-            }
-        }
-        if ((flags & 0x04U) != 0) {
-            if (!packet.empty() ||
-                granule == (std::numeric_limits<std::uint64_t>::max)()) {
-                return std::nullopt;
-            }
-            saw_eos = true;
-            if (offset + page_size != bytes.size()) {
-                return std::nullopt;
-            }
-            return OggTimeline{granule, has_origin ? origin : 0};
-        }
-        offset += page_size;
+    if (bytes.size() < ::ysm::codec::kOggPageHeaderSize ||
+        !Cmp(bytes.first<kOgg.size()>(), kOgg)) {
+        return false;
     }
-    return std::nullopt;
+    const auto segment_count = static_cast<std::size_t>(bytes[26]);
+    const auto body_offset = ::ysm::codec::kOggPageHeaderSize + segment_count;
+    if (body_offset > bytes.size()) {
+        return false;
+    }
+    std::size_t packet_size = 0;
+    for (std::size_t index = 0; index < segment_count; ++index) {
+        const auto size = static_cast<std::size_t>(bytes[27 + index]);
+        if (size > bytes.size() - body_offset - packet_size) {
+            return false;
+        }
+        packet_size += size;
+        if (size != 255) {
+            break;
+        }
+    }
+    return packet_size >= prefix.size() &&
+           Cmp(bytes.subspan(body_offset, prefix.size()), prefix);
 }
 
 SoundClassification DetectSound(BufferViewR bytes) {
     constexpr BufferFixed<4> kOgg{'O', 'g', 'g', 'S'};
     constexpr BufferFixed<8> kOpus{'O', 'p', 'u', 's', 'H', 'e', 'a', 'd'};
     constexpr BufferFixed<7> kVorbis{1, 'v', 'o', 'r', 'b', 'i', 's'};
-    constexpr std::size_t kOpusHeaderSize = 19;
-    constexpr std::size_t kVorbisHeaderSize = 16;
     if (bytes.size() < kOgg.size() ||
         !Cmp(Slice(bytes, 0, kOgg.size()), kOgg)) {
         return {
@@ -895,80 +748,28 @@ SoundClassification DetectSound(BufferViewR bytes) {
             "no Ogg capture pattern was found"};
     }
 
-    ::ysm::codec::MiniOgg parser;
-    const auto parsed = parser.Process(bytes);
-    if (!parsed.ok() || !parser.Page() || bytes.size() < 27 || bytes[4] != 0 ||
-        (bytes[5] & ~0x07U) != 0 || (bytes[5] & 0x03U) != 0x02U ||
-        OggLe32(Slice(bytes, 18, 4)) != 0) {
-        return {SoundDisposition::kUnknown, SoundEncoding::kVorbis, 0, 0, 0,
-                "invalid initial Ogg page"};
+    const bool looks_opus = FirstOggPacketHasPrefix(bytes, kOpus);
+    const bool looks_vorbis = FirstOggPacketHasPrefix(bytes, kVorbis);
+    const auto facts = ::ysm::codec::InspectAudio(bytes);
+    if (!facts.ok()) {
+        return {looks_opus || looks_vorbis ? SoundDisposition::kCorruptSupported
+                                           : SoundDisposition::kUnknown,
+                looks_opus ? SoundEncoding::kOpus : SoundEncoding::kVorbis,
+                0,
+                0,
+                0,
+                looks_opus || looks_vorbis
+                    ? std::string(facts.status().message())
+                    : "no supported Vorbis or Opus stream was found"};
     }
-
-    const auto packet = parsed->packet;
-    const auto serial = OggLe32(Slice(bytes, 14, 4));
-    if (packet.size() >= kOpus.size() &&
-        Cmp(Slice(packet, 0, kOpus.size()), kOpus)) {
-        const auto timeline = InspectOggTimeline(bytes, serial, true);
-        if (parsed->status != ::ysm::codec::MiniOgg::ProcessStatus::kFull ||
-            packet.size() < kOpusHeaderSize || packet[8] != 1 ||
-            (packet[9] != 1 && packet[9] != 2) || packet[18] != 0 ||
-            !timeline) {
-            return {SoundDisposition::kCorruptSupported,
-                    SoundEncoding::kOpus,
-                    0,
-                    0,
-                    0,
-                    "invalid Opus identification or final page"};
-        }
-        const auto pre_skip = static_cast<std::uint16_t>(packet[10]) |
-                              static_cast<std::uint16_t>(packet[11]) << 8U;
-        if (timeline->final_granule < timeline->origin ||
-            timeline->final_granule - timeline->origin < pre_skip) {
-            return {SoundDisposition::kCorruptSupported,
-                    SoundEncoding::kOpus,
-                    packet[9],
-                    48'000,
-                    0,
-                    "Opus final granule precedes pre-skip"};
-        }
-        return {SoundDisposition::kPlayable,
-                SoundEncoding::kOpus,
-                packet[9],
-                48'000,
-                timeline->final_granule - timeline->origin - pre_skip,
-                {}};
-    }
-    if (packet.size() >= kVorbis.size() &&
-        Cmp(Slice(packet, 0, kVorbis.size()), kVorbis)) {
-        const auto timeline = InspectOggTimeline(bytes, serial, false);
-        const auto sample_rate = packet.size() >= kVorbisHeaderSize
-                                     ? OggLe32(Slice(packet, 12, 4))
-                                     : 0;
-        if (parsed->status != ::ysm::codec::MiniOgg::ProcessStatus::kFull ||
-            packet.size() < kVorbisHeaderSize ||
-            OggLe32(Slice(packet, 7, 4)) != 0 ||
-            (packet[11] != 1 && packet[11] != 2) || sample_rate == 0 ||
-            !timeline) {
-            return {SoundDisposition::kCorruptSupported,
-                    SoundEncoding::kVorbis,
-                    0,
-                    0,
-                    0,
-                    "invalid Vorbis identification or final page"};
-        }
-        return {SoundDisposition::kPlayable,
-                SoundEncoding::kVorbis,
-                packet[11],
-                sample_rate,
-                timeline->final_granule,
-                {}};
-    }
-    return {SoundDisposition::kUnknown,
-            SoundEncoding::kVorbis,
-            0,
-            0,
-            0,
-            "no Vorbis or Opus identification packet was found"};
+    return {SoundDisposition::kPlayable,
+            facts->codec == ::ysm::codec::AudioCodec::kOpus
+                ? SoundEncoding::kOpus
+                : SoundEncoding::kVorbis,
+            facts->channels,
+            facts->sample_rate,
+            facts->frames,
+            {}};
 }
 
 bool ParseSound(auto& context, LegacySound& value, bool& playable) {

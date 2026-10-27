@@ -8,7 +8,7 @@ class JpegTurboConan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     exports_sources = "patches/*", "src/*"
     name = "jpeg-turbo"
-    version = "3.1.90"
+    version = "3.2.0"
     license = ""
     package_type = "static-library"
 

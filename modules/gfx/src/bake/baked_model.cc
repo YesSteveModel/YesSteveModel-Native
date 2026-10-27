@@ -95,8 +95,7 @@ absl::StatusOr<BoneHierarchy> BuildBoneHierarchy(
     original_by_name.reserve(bone_count);
     for (uint32_t i = 0; i < bone_count; ++i) {
         const auto& bone = model.bones[i];
-        if (bone.name.empty() ||
-            !original_by_name.emplace(bone.name, i).second ||
+        if (!original_by_name.emplace(bone.name, i).second ||
             bone.pivot.size() != 3 || bone.rotate.size() != 3 ||
             !IsFinite(bone.pivot) || !IsFinite(bone.rotate)) {
             return absl::InvalidArgumentError("Invalid bone metadata.");

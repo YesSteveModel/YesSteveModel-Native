@@ -8,7 +8,7 @@ class AvifConan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     exports_sources = "patches/*", "src/*"
     name = "avif"
-    version = "1.4.1"
+    version = "1.4.2"
     license = ""
     package_type = "static-library"
 

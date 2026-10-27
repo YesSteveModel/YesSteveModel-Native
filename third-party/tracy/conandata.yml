@@ -1,12 +1,13 @@
 sources:
-  0.13.1:
+  "0.14.1":
     url: https://github.com/wolfpld/tracy
-    tag: v0.13.1
-    commit: 05cceee0df3b8d7c6fa87e9638af311dbabc63cb
+    tag: v0.14.1
 patches:
-  0.13.1: []
-requirements: []
+  "0.14.1":
+  - patch_file: patches/tracy-mimalloc.patch
 build:
+  global_link_targets:
+  - mimalloc-static
   options:
     BUILD_SHARED_LIBS: false
     TRACY_STATIC: true
@@ -14,7 +15,7 @@ build:
     TRACY_LTO: false
     TRACY_ENABLE: true
     TRACY_ON_DEMAND: true
-    TRACY_CALLSTACK: false
+    TRACY_CALLSTACK: 0
     TRACY_NO_CALLSTACK: true
     TRACY_NO_CODE_TRANSFER: true
     TRACY_NO_CONTEXT_SWITCH: true

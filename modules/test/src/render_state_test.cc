@@ -155,7 +155,10 @@ absl::Status UpdateRenderState(gfx::renderer::RenderState& output,
     if (!status.ok()) {
         return status;
     }
-    return output.Update(kGenericTag, params, input.model_state, 0, 1);
+    return output.Update(kGenericTag, params, input.model_state, 0, 1) ==
+                   gfx::renderer::RenderResult::kSuccess
+               ? absl::OkStatus()
+               : absl::InvalidArgumentError("Render state update failed");
 }
 
 }  // namespace
@@ -571,6 +574,35 @@ TEST(RenderStateTest, NonPbrStillTracksNonUniformScaleForNormals) {
     EXPECT_FLOAT_EQ(transformed.GetBoneState(0).tangent_orientation, -1.0f);
 }
 
+TEST(RenderStateTest, ClipCompositionOverflowRejectsOutputWithoutDamagingSource) {
+    gfx::renderer::RenderParameters params{};
+    glm_mat4_identity(params.model);
+    glm_mat4_identity(params.view);
+    glm_mat4_identity(params.projection);
+    glm_mat3_identity(params.normal);
+    params.view[0][0] = std::numeric_limits<float>::max() / 2;
+    std::vector<gfx::renderer::BonePose> poses(1);
+    glm_mat4_identity(poses[0].pose);
+    glm_mat3_identity(poses[0].normal);
+    poses[0].pose[0][0] = 4;
+    poses[0].normal[0][0] = 0.25f;
+    const std::vector<uint16_t> indices{0};
+    gfx::bake::BakedModelBones bones;
+    bones.list.resize(1);
+    bones.list[0].solid = false;
+    auto input = MakeRenderStateInput(poses, indices, bones, false);
+    ASSERT_TRUE(input.ok()) << input.status();
+    gfx::renderer::RenderState transformed;
+    ASSERT_TRUE(transformed.UpdateCommon(kGenericTag, params, (**input).model_state).ok());
+    EXPECT_EQ(transformed.Update(kGenericTag, params, (**input).model_state, 0, 1),
+              gfx::renderer::RenderResult::kOutputRejected);
+    EXPECT_EQ(transformed.GetBoneState(0).result,
+              gfx::renderer::RenderResult::kOutputRejected);
+    EXPECT_FLOAT_EQ((**input).poses[0].pose[0][0], 4);
+    glm_mat4_identity(params.view);
+    EXPECT_TRUE(UpdateRenderState(transformed, params, **input).ok());
+}
+
 TEST(RenderStateTest, SplitRangesMatchSerialUpdate) {
     gfx::renderer::RenderParameters params{};
     glm_mat4_identity(params.model);
@@ -608,10 +640,10 @@ TEST(RenderStateTest, SplitRangesMatchSerialUpdate) {
     gfx::renderer::RenderState split;
     ASSERT_TRUE(
         split.UpdateCommon(kGenericTag, params, (**input).model_state).ok());
-    ASSERT_TRUE(
-        split.Update(kGenericTag, params, (**input).model_state, 0, 2).ok());
-    ASSERT_TRUE(
-        split.Update(kGenericTag, params, (**input).model_state, 1, 2).ok());
+    ASSERT_EQ(split.Update(kGenericTag, params, (**input).model_state, 0, 2),
+              gfx::renderer::RenderResult::kSuccess);
+    ASSERT_EQ(split.Update(kGenericTag, params, (**input).model_state, 1, 2),
+              gfx::renderer::RenderResult::kSuccess);
 
     for (size_t index = 0; index < poses.size(); ++index) {
         const auto& expected = serial.GetBoneState(index);

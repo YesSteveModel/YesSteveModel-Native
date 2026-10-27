@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <future>
+#include <latch>
 #include <random>
 #include <span>
 #include <stdexcept>
@@ -81,26 +83,40 @@ TEST(LegacyEnvelopeTest, EnforcesSourceAndSummaryCeilingsBeforeDecode) {
     ExpectStatus(summary, absl::StatusCode::kResourceExhausted);
 }
 
-TEST(LegacyEnvelopeTest, DecodesHistoricalDynamicTransformVector) {
+TEST(LegacyEnvelopeTest, DecodesHistoricalDynamicTransformVectorConcurrently) {
     const auto fixture =
         std::filesystem::path(__FILE__).parent_path().parent_path() / "data" /
         "legacy_v3_dynamic_vector.ysm";
     const auto source = ReadFile(fixture);
-    ContainerReader reader(source);
-    ASSERT_TRUE(reader.Initialize().ok());
-
-    std::vector<Byte> plaintext(12'004);
-    ASSERT_TRUE(reader.ReadExact(plaintext)) << reader.status();
-    ASSERT_TRUE(reader.Finish()) << reader.status();
-
-    EXPECT_EQ(plaintext[0], 1);
-    EXPECT_EQ(plaintext[1], 0);
-    EXPECT_EQ(plaintext[2], 0);
-    EXPECT_EQ(plaintext[3], 0);
-    std::mt19937_64 generator(0xD15EA5E);
-    for (std::size_t index = 4; index < plaintext.size(); ++index) {
-        ASSERT_EQ(plaintext[index], static_cast<Byte>(generator()))
-            << "offset=" << index;
+    std::array<std::future<absl::StatusOr<std::vector<Byte>>>, 4> decodes;
+    std::latch start(decodes.size());
+    for (auto& pending : decodes) {
+        pending = std::async(std::launch::async, [&source, &start]()
+                                -> absl::StatusOr<std::vector<Byte>> {
+            start.arrive_and_wait();
+            ContainerReader reader(source);
+            if (auto status = reader.Initialize(); !status.ok()) {
+                return status;
+            }
+            std::vector<Byte> plaintext(12'004);
+            if (!reader.ReadExact(plaintext) || !reader.Finish()) {
+                return reader.status();
+            }
+            return plaintext;
+        });
+    }
+    for (auto& pending : decodes) {
+        const auto plaintext = pending.get();
+        ASSERT_TRUE(plaintext.ok()) << plaintext.status();
+        EXPECT_EQ((*plaintext)[0], 1);
+        EXPECT_EQ((*plaintext)[1], 0);
+        EXPECT_EQ((*plaintext)[2], 0);
+        EXPECT_EQ((*plaintext)[3], 0);
+        std::mt19937_64 generator(0xD15EA5E);
+        for (std::size_t index = 4; index < plaintext->size(); ++index) {
+            ASSERT_EQ((*plaintext)[index], static_cast<Byte>(generator()))
+                << "offset=" << index;
+        }
     }
 }
 }  // namespace

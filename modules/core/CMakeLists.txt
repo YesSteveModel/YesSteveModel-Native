@@ -36,6 +36,7 @@ target_link_libraries(ysm-core PUBLIC
         absl::log
         absl::time
 )
+target_link_libraries(ysm-core PRIVATE absl::function_ref)
 
 # tracy
 if (YSM_ENABLE_TRACY)

@@ -8,7 +8,7 @@ patches:
   - patch_file: patches/opus.patch
   - patch_file: patches/opus-clang-cl-avx.patch
 requirements:
-- mimalloc/3.5.3@ysm/stable
+- mimalloc/3.6.0@ysm/stable
 build:
   global_link_targets:
   - mimalloc-static

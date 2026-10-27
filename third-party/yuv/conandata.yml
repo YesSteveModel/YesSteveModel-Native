@@ -1,17 +1,18 @@
 sources:
-  0.0.1892:
+  0.0.1974:
     url: https://github.com/lemenkov/libyuv
-    commit: 9d98aaefe7a5e2710aa6175d44da38892400b381
+    commit: 47ba8e2160b71a7cf95c0720cd8944ab771e533e
 patches:
-  0.0.1892:
+  0.0.1974:
   - patch_file: patches/yuv.patch
   - patch_file: patches/yuv-static-only.patch
 requirements:
-- mimalloc/3.5.3@ysm/stable
+- mimalloc/3.6.0@ysm/stable
 build:
   global_link_targets:
   - mimalloc-static
   options:
+    LIBYUV_DISABLE_JPEG: true
     LIBYUV_BUILD_SHARED_LIBRARY: false
     LIBYUV_BUILD_TOOLS: false
     UNIT_TEST: false

@@ -108,9 +108,15 @@ YSM_INLINE uint8_t MultiplyChannel(uint8_t parent, uint8_t value) noexcept {
 
 namespace ysm::gfx::renderer {
 template <>
+YSM_SIMD_TARGET
 absl::Status RenderState::UpdateCommon<YSM_SIMD_TAG>(YSM_SIMD_TAG tag, const RenderParameters& params,
                                        const ModelState& model_state) {
     YSM_PROFILE_ZONE("YSM/C++/RenderState.UpdateCommon");
+    YSM_ASSERT(IsFinite(std::span(&params.model[0][0], 16)) &&
+                   IsFinite(std::span(&params.view[0][0], 16)) &&
+                   IsFinite(std::span(&params.projection[0][0], 16)) &&
+                   IsFinite(std::span(&params.normal[0][0], 9)),
+               absl::InvalidArgumentError("Non-finite render matrix."));
     auto& model_info = model_state.Model()->Info();
     auto& bone_info = model_state.Model()->Bones();
     auto& schedule = model_state.Schedule();
@@ -160,34 +166,30 @@ absl::Status RenderState::UpdateCommon<YSM_SIMD_TAG>(YSM_SIMD_TAG tag, const Ren
 }
 
 template <>
-absl::Status RenderState::Update<YSM_SIMD_TAG>(YSM_SIMD_TAG tag,
+YSM_SIMD_TARGET
+RenderResult RenderState::Update<YSM_SIMD_TAG>(YSM_SIMD_TAG tag,
                                  const RenderParameters& params,
                                  const ModelState& model_state,
                                  uint32_t worker_index,
                                  uint32_t worker_count) {
     YSM_PROFILE_ZONE("YSM/C++/RenderState.Update");
-    YSM_ASSERT(IsFinite(std::span(&params.model[0][0], 16)) &&
-                   IsFinite(std::span(&params.view[0][0], 16)) &&
-                   IsFinite(std::span(&params.projection[0][0], 16)) &&
-                   IsFinite(std::span(&params.normal[0][0], 9)),
-               absl::InvalidArgumentError("Non-finite render matrix."));
     auto& bone_info = model_state.Model()->Bones();
     auto model_pose = model_state.PoseView();
     auto [begin, end] = DetermineTaskRange(worker_index,
         worker_count, model_pose.render_bone_indices.size());
     YSM_PROFILE_VALUE(end - begin);
 
-    auto err = OkStatus();
+    auto result = RenderResult::kSuccess;
     for (auto i = begin; i < end; ++i) {
         const auto bone_index = model_pose.render_bone_indices[i];
         if (bone_index >= bone_info.list.size()) [[unlikely]] {
-            return absl::InvalidArgumentError("Render bone index out of range");
+            return RenderResult::kStateInvalid;
         }
 
         const auto& source = model_pose.bone_poses[bone_index];
         auto& destination = bone_states[bone_index];
 
-        destination.ok = true;
+        destination.result = RenderResult::kSuccess;
 
         math::AffineMul(tag, params.model, source.pose,
                         destination.pose);
@@ -203,19 +205,29 @@ absl::Status RenderState::Update<YSM_SIMD_TAG>(YSM_SIMD_TAG tag,
         if (!(IsFinite(std::span(&destination.pose[0][0], 16)) &&
                 IsFinite(std::span(&destination.normal[0][0], 9)) &&
                 IsFinite(std::span(destination.facing_coeff, 4)))) [[unlikely]] {
-            err = absl::InvalidArgumentError("Bone render transform is non-finite.");
-            destination.ok = false;
+            destination.result = RenderResult::kOutputRejected;
         }
         if (!bone_info.list[bone_index].solid) {
             mat4 clip;
             math::Mat4Mul(tag, clip_model, source.pose, clip);
             if (!IsFinite(std::span(&clip[0][0], 16))) [[unlikely]] {
-                err = absl::InvalidArgumentError(
-                    "Bone render transform is non-finite.");
-                destination.ok = false;
+                destination.result = RenderResult::kOutputRejected;
             }
             ExtractRow(clip, 2, destination.depth_z);
             ExtractRow(clip, 3, destination.depth_w);
+        }
+
+        if (destination.result != RenderResult::kSuccess) [[unlikely]] {
+            // Check the source only on failure: finite inputs can overflow together.
+            if (!(IsFinite(std::span(&source.pose[0][0], 16)) &&
+                  IsFinite(std::span(&source.normal[0][0], 9)) &&
+                  std::isfinite(source.tangent_orientation) &&
+                  std::isfinite(source.normal_scale))) {
+                destination.result = RenderResult::kStateInvalid;
+            }
+            if (result != RenderResult::kStateInvalid) {
+                result = destination.result;
+            }
         }
 
         // 这对吗？
@@ -240,7 +252,7 @@ absl::Status RenderState::Update<YSM_SIMD_TAG>(YSM_SIMD_TAG tag,
                                              (static_cast<uint32_t>(source.glowing)
                                               << 20);
     }
-    return err;
+    return result;
 }
 }
 

@@ -1,14 +1,15 @@
 sources:
-  1.1.5:
+  1.2.0:
     url: https://github.com/imageworks/pystring
-    tag: v1.1.5
-    commit: 381829c2c1696ffec9277b339952a9588e6e67cf
+    tag: v1.2.0
 patches:
-  1.1.5: []
+  1.2.0:
+    - patch_file: patches/pystring-optional-tests.patch
 requirements: []
 build:
   options:
     BUILD_SHARED_LIBS: false
+    BUILD_TESTING: false
   install: true
 package:
   cmake_file_name: pystring

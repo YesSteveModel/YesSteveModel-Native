@@ -1,0 +1,111 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 073fb6f..2446171 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -79,7 +79,6 @@ endif()
+ # Public dependency on some libraries required when using Mingw
+ if(WIN32 AND ${CMAKE_CXX_COMPILER_ID} MATCHES "GNU|Clang")
+     target_link_libraries(TracyClient PUBLIC ws2_32 dbghelp secur32)
+-    target_compile_definitions(TracyClient PUBLIC WINVER=0x0A00 _WIN32_WINNT=0x0A00)
+ endif()
+ 
+ if(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
+diff --git a/public/common/TracyAlloc.hpp b/public/common/TracyAlloc.hpp
+index 52ec215..402daa9 100644
+--- a/public/common/TracyAlloc.hpp
++++ b/public/common/TracyAlloc.hpp
+@@ -2,12 +2,15 @@
+ #define __TRACYALLOC_HPP__
+ 
+ #include <stdlib.h>
++#include <mimalloc.h>
++
+ 
+ #ifdef TRACY_PLATFORM_HEADER
+ #  include TRACY_PLATFORM_HEADER
+ #endif
+ 
+ #if defined TRACY_ENABLE && !defined __EMSCRIPTEN__
++#  define TRACY_HAS_CUSTOM_ALLOCATOR
+ #  include "TracyApi.h"
+ #  include "TracyForceInline.hpp"
+ #  if !defined TRACY_HAS_CUSTOM_ALLOCATOR
+@@ -19,6 +22,15 @@
+ namespace tracy
+ {
+ 
++static inline void PlatformAllocatorInit() {}
++static inline void PlatformAllocatorThreadInit() {}
++static inline void PlatformAllocatorThreadFinalize() {}
++// The host owns mimalloc lifetime; profiler shutdown must not finalize it.
++static inline void PlatformAllocatorFinalize() {}
++static inline void* PlatformMalloc( size_t size ) { return mi_malloc( size ); }
++static inline void PlatformFree( void* ptr ) { mi_free( ptr ); }
++static inline void* PlatformRealloc( void* ptr, size_t size ) { return mi_realloc( ptr, size ); }
++
+ #if defined TRACY_USE_RPMALLOC || defined TRACY_HAS_CUSTOM_ALLOCATOR
+ TRACY_API void InitAllocator();
+ #else
+@@ -34,7 +46,7 @@ static inline void* tracy_malloc( size_t size )
+     InitAllocator();
+     return rpmalloc( size );
+ #else
+-    return malloc( size );
++    return mi_malloc( size );
+ #endif
+ }
+ 
+@@ -45,7 +57,7 @@ static inline void* tracy_malloc_fast( size_t size )
+ #elif defined TRACY_USE_RPMALLOC
+     return rpmalloc( size );
+ #else
+-    return malloc( size );
++    return mi_malloc( size );
+ #endif
+ }
+ 
+@@ -58,7 +70,7 @@ static inline void tracy_free( void* ptr )
+     InitAllocator();
+     rpfree( ptr );
+ #else
+-    free( ptr );
++    mi_free( ptr );
+ #endif
+ }
+ 
+@@ -69,7 +81,7 @@ static inline void tracy_free_fast( void* ptr )
+ #elif defined TRACY_USE_RPMALLOC
+     rpfree( ptr );
+ #else
+-    free( ptr );
++    mi_free( ptr );
+ #endif
+ }
+ 
+@@ -82,7 +94,7 @@ static inline void* tracy_realloc( void* ptr, size_t size )
+     InitAllocator();
+     return rprealloc( ptr, size );
+ #else
+-    return realloc( ptr, size );
++    return mi_realloc( ptr, size );
+ #endif
+ }
+ 
+diff --git a/public/common/tracy_lz4.cpp b/public/common/tracy_lz4.cpp
+index 15d0990..bf22096 100644
+--- a/public/common/tracy_lz4.cpp
++++ b/public/common/tracy_lz4.cpp
+@@ -220,9 +220,10 @@ void  LZ4_free(void* p);
+ # define FREEMEM(p)        LZ4_free(p)
+ #else
+ # include <stdlib.h>   /* malloc, calloc, free */
+-# define ALLOC(s)          malloc(s)
+-# define ALLOC_AND_ZERO(s) calloc(1,s)
+-# define FREEMEM(p)        free(p)
++# include <mimalloc.h>
++# define ALLOC(s)          mi_malloc(s)
++# define ALLOC_AND_ZERO(s) mi_calloc(1,s)
++# define FREEMEM(p)        mi_free(p)
+ #endif
+ 
+ #if ! LZ4_FREESTANDING

@@ -8,7 +8,7 @@ class Blake3Conan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     exports_sources = "patches/*", "src/*"
     name = "blake3"
-    version = "1.8.5"
+    version = "1.8.7"
     license = ""
     package_type = "static-library"
 

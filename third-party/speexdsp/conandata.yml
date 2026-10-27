@@ -1,0 +1,26 @@
+sources:
+  1.2.1:
+    url: https://github.com/xiph/speexdsp
+    tag: SpeexDSP-1.2.1
+patches:
+  1.2.1:
+  - patch_file: patches/speexdsp.patch
+requirements:
+- mimalloc/3.6.0@ysm/stable
+build:
+  global_link_targets:
+  - mimalloc-static
+  options: {}
+  install: false
+package:
+  cmake_file_name: SpeexDSP
+  cmake_target_name: SpeexDSP::resampler
+  libs:
+  - speexdsp-resampler
+  manual_headers:
+  - dst: include/speex
+    pattern: speex_resampler.h
+    src: include/speex
+  - dst: include/speex
+    pattern: speexdsp_types.h
+    src: include/speex

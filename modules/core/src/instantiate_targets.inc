@@ -29,7 +29,7 @@
 
 #define YSM_SIMD_TYPE ::ysm::simd::Type::SSE41
 #define YSM_SIMD_TAG ::ysm::simd::Tag<YSM_SIMD_TYPE>
-#define YSM_SIMD_TARGET
+#define YSM_SIMD_TARGET YSM_TARGET_SSE41
 #include YSM_INSTANTIATE_FILE
 #undef YSM_SIMD_TARGET
 #undef YSM_SIMD_TAG

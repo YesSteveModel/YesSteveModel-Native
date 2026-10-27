@@ -8,7 +8,7 @@ class PystringConan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     exports_sources = "patches/*", "src/*"
     name = "pystring"
-    version = "1.1.5"
+    version = "1.2.0"
     license = ""
     package_type = "static-library"
 

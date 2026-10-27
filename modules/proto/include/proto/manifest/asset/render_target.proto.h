@@ -8,10 +8,10 @@ namespace ysm::proto::manifest::asset {
 
 
 enum class RenderTargetKind {
-    RENDER_TARGET_KIND_UNSPECIFIED = 0,
-    RENDER_TARGET_KIND_PLAYER = 1,
-    RENDER_TARGET_KIND_PROJECTILE = 3,
-    RENDER_TARGET_KIND_VEHICLE = 4,
+    kUnspecified = 0,
+    kPlayer = 1,
+    kProjectile = 3,
+    kVehicle = 4,
 };
 
 struct TexturesEntry : public iguana::base_impl<TexturesEntry>  {

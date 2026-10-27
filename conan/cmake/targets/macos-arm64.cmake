@@ -30,4 +30,9 @@ if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
         LLVM
         -fwhole-program-vtables
     )
+    if (MACOS_SPLIT_LTO_FIXED)
+        add_c_compile_options(LLVM -fsplit-lto-unit)
+    else ()
+        add_c_compile_options(LLVM -fno-split-lto-unit)
+    endif ()
 endif()

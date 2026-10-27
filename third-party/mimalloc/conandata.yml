@@ -1,14 +1,12 @@
 sources:
-  3.5.3:
+  3.6.0:
     url: https://github.com/microsoft/mimalloc
-    tag: v3.5.3
-    commit: deac3dcf5f0614884013d411a5c07e16bec96c9f
+    tag: v3.6.0
+patches:
+  3.6.0:
+    - patch_file: patches/mimalloc-android-identity.patch
 requirements: []
 build:
-  cache_variables:
-    YSM_DISABLE_TARGET_ISA:
-      windows: true
-      linux: true
   options:
     MI_BUILD_OBJECT: false
     MI_BUILD_SHARED: false
@@ -26,6 +24,7 @@ build:
     MI_OSX_INTERPOSE: false
     MI_OSX_ZONE: false
     MI_OVERRIDE: false
+    MI_PROFILE: false
     MI_WIN_REDIRECT: false
     MI_SKIP_COLLECT_ON_EXIT: true
   install: true
@@ -34,4 +33,4 @@ package:
   cmake_file_name: mimalloc
   cmake_target_name: mimalloc-static
   includedirs:
-  - include/mimalloc-3.5
+  - include/mimalloc-3.6

@@ -97,7 +97,7 @@ index 3e297e6..ca94f9a 100644
    glm_rotate_atm(rot, m[3], angle, axis);
    glm_mat4_mul(rot, m, m);
 diff --git a/include/cglm/affine-pre.h b/include/cglm/affine-pre.h
-index 2fa77f7..6c31d70 100644
+index 232fa45..da82c99 100644
 --- a/include/cglm/affine-pre.h
 +++ b/include/cglm/affine-pre.h
 @@ -40,7 +40,7 @@
@@ -179,7 +179,7 @@ index 2fa77f7..6c31d70 100644
 -glm_spin(mat4 m, float angle, vec3 axis) {
 +glm_spin(mat4 m, float angle, const vec3 axis) {
    CGLM_ALIGN_MAT mat4 rot;
-   glm_rotate_atm(rot, m[3], angle, axis);
+   glm_rotate_make(rot, angle, axis);
    glm_mat4_mul(m, rot, m);
 diff --git a/include/cglm/affine.h b/include/cglm/affine.h
 index 2c608f7..69732ce 100644
@@ -298,10 +298,10 @@ index 0dcf50a..44413d3 100644
          m01 = m[0][1],  m11 = m[1][1],
          m02 = m[0][2],  m12 = m[1][2];
 diff --git a/include/cglm/mat3.h b/include/cglm/mat3.h
-index 9d5f0d4..f78ebe7 100644
+index 10b373e..0580699 100644
 --- a/include/cglm/mat3.h
 +++ b/include/cglm/mat3.h
-@@ -70,7 +70,7 @@
+@@ -71,7 +71,7 @@
   */
  CGLM_INLINE
  void
@@ -310,7 +310,7 @@ index 9d5f0d4..f78ebe7 100644
    dest[0][0] = mat[0][0];
    dest[0][1] = mat[0][1];
    dest[0][2] = mat[0][2];
-@@ -152,7 +152,7 @@ glm_mat3_zero(mat3 mat) {
+@@ -153,7 +153,7 @@ glm_mat3_zero(mat3 mat) {
   */
  CGLM_INLINE
  void
@@ -319,7 +319,7 @@ index 9d5f0d4..f78ebe7 100644
  #if defined(__wasm__) && defined(__wasm_simd128__)
    glm_mat3_mul_wasm(m1, m2, dest);
  #elif defined( __SSE__ ) || defined( __SSE2__ )
-@@ -234,7 +234,7 @@ glm_mat3_transpose(mat3 m) {
+@@ -235,7 +235,7 @@ glm_mat3_transpose(mat3 m) {
   */
  CGLM_INLINE
  void
@@ -328,7 +328,7 @@ index 9d5f0d4..f78ebe7 100644
    vec3 res;
    res[0] = m[0][0] * v[0] + m[1][0] * v[1] + m[2][0] * v[2];
    res[1] = m[0][1] * v[0] + m[1][1] * v[1] + m[2][1] * v[2];
-@@ -329,7 +329,7 @@ glm_mat3_scale(mat3 m, float s) {
+@@ -330,7 +330,7 @@ glm_mat3_scale(mat3 m, float s) {
   */
  CGLM_INLINE
  float
@@ -338,10 +338,10 @@ index 9d5f0d4..f78ebe7 100644
          d = mat[1][0], e = mat[1][1], f = mat[1][2],
          g = mat[2][0], h = mat[2][1], i = mat[2][2];
 diff --git a/include/cglm/mat4.h b/include/cglm/mat4.h
-index 1c36c26..e081f27 100644
+index c3fe7fd..b12ac38 100644
 --- a/include/cglm/mat4.h
 +++ b/include/cglm/mat4.h
-@@ -125,7 +125,7 @@ glm_mat4_ucopy(mat4 mat, mat4 dest) {
+@@ -126,7 +126,7 @@ glm_mat4_ucopy(mat4 mat, mat4 dest) {
   */
  CGLM_INLINE
  void
@@ -350,7 +350,7 @@ index 1c36c26..e081f27 100644
  #if defined(__wasm__) && defined(__wasm_simd128__)
    glmm_store(dest[0], glmm_load(mat[0]));
    glmm_store(dest[1], glmm_load(mat[1]));
-@@ -237,7 +237,7 @@ glm_mat4_zero(mat4 mat) {
+@@ -238,7 +238,7 @@ glm_mat4_zero(mat4 mat) {
   */
  CGLM_INLINE
  void
@@ -359,7 +359,7 @@ index 1c36c26..e081f27 100644
    dest[0][0] = mat[0][0];
    dest[0][1] = mat[0][1];
    dest[0][2] = mat[0][2];
-@@ -313,7 +313,7 @@ glm_mat4_ins3(mat3 mat, mat4 dest) {
+@@ -314,7 +314,7 @@ glm_mat4_ins3(mat3 mat, mat4 dest) {
   */
  CGLM_INLINE
  void
@@ -368,7 +368,7 @@ index 1c36c26..e081f27 100644
  #if defined(__wasm__) && defined(__wasm_simd128__)
    glm_mat4_mul_wasm(m1, m2, dest);
  #elif defined(__AVX__)
-@@ -395,7 +395,7 @@ glm_mat4_mulN(mat4 * __restrict matrices[], uint32_t len, mat4 dest) {
+@@ -396,7 +396,7 @@ glm_mat4_mulN(mat4 * __restrict matrices[], uint32_t len, mat4 dest) {
   */
  CGLM_INLINE
  void
@@ -377,7 +377,7 @@ index 1c36c26..e081f27 100644
  #if defined(__wasm__) && defined(__wasm_simd128__)
    glm_mat4_mulv_wasm(m, v, dest);
  #elif defined( __SSE__ ) || defined( __SSE2__ )
-@@ -500,7 +500,7 @@ glm_mat4_quat(mat4 m, versor dest) {
+@@ -501,7 +501,7 @@ glm_mat4_quat(mat4 m, versor dest) {
   */
  CGLM_INLINE
  void
@@ -387,7 +387,7 @@ index 1c36c26..e081f27 100644
    glm_vec4(v, last, res);
    glm_mat4_mulv(m, res, res);
 diff --git a/include/cglm/quat.h b/include/cglm/quat.h
-index cf1f325..5760ff3 100644
+index 75f0c6c..09690bd 100644
 --- a/include/cglm/quat.h
 +++ b/include/cglm/quat.h
 @@ -231,7 +231,7 @@ glm_quat_from_vecs(vec3 a, vec3 b, versor dest) {
@@ -432,9 +432,9 @@ index cf1f325..5760ff3 100644
  void
 -glm_quat_mat4(versor q, mat4 dest) {
 +glm_quat_mat4(const versor q, mat4 dest) {
+   CGLM_ALIGN(16) versor p;
    float w, x, y, z,
          xx, yy, zz,
-         xy, yz, xz,
 @@ -856,7 +856,7 @@ glm_quat_forp(vec3 from, vec3 to, vec3 up, versor dest) {
   */
  CGLM_INLINE
@@ -656,10 +656,10 @@ index 79ed688..1051d8a 100644
  
    m0 = glmm_load(m[0]);
 diff --git a/include/cglm/vec3.h b/include/cglm/vec3.h
-index 1350818..dce8887 100644
+index 5667e3e..bd25bd1 100644
 --- a/include/cglm/vec3.h
 +++ b/include/cglm/vec3.h
-@@ -154,7 +154,7 @@ glm_vec3(vec4 v4, vec3 dest) {
+@@ -155,7 +155,7 @@ glm_vec3(vec4 v4, vec3 dest) {
   */
  CGLM_INLINE
  void
@@ -668,7 +668,7 @@ index 1350818..dce8887 100644
    dest[0] = a[0];
    dest[1] = a[1];
    dest[2] = a[2];
-@@ -192,7 +192,7 @@ glm_vec3_one(vec3 v) {
+@@ -193,7 +193,7 @@ glm_vec3_one(vec3 v) {
   */
  CGLM_INLINE
  float
@@ -677,7 +677,7 @@ index 1350818..dce8887 100644
    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
  }
  
-@@ -209,7 +209,7 @@ glm_vec3_dot(vec3 a, vec3 b) {
+@@ -210,7 +210,7 @@ glm_vec3_dot(vec3 a, vec3 b) {
   */
  CGLM_INLINE
  float
@@ -686,7 +686,7 @@ index 1350818..dce8887 100644
    return glm_vec3_dot(v, v);
  }
  
-@@ -223,7 +223,7 @@ glm_vec3_norm2(vec3 v) {
+@@ -224,7 +224,7 @@ glm_vec3_norm2(vec3 v) {
   */
  CGLM_INLINE
  float
@@ -695,7 +695,7 @@ index 1350818..dce8887 100644
    return sqrtf(glm_vec3_norm2(v));
  }
  
-@@ -279,7 +279,7 @@ glm_vec3_norm_inf(vec3 v) {
+@@ -280,7 +280,7 @@ glm_vec3_norm_inf(vec3 v) {
   */
  CGLM_INLINE
  void
@@ -704,7 +704,7 @@ index 1350818..dce8887 100644
    dest[0] = a[0] + b[0];
    dest[1] = a[1] + b[1];
    dest[2] = a[2] + b[2];
-@@ -309,7 +309,7 @@ glm_vec3_adds(vec3 v, float s, vec3 dest) {
+@@ -310,7 +310,7 @@ glm_vec3_adds(vec3 v, float s, vec3 dest) {
   */
  CGLM_INLINE
  void
@@ -713,7 +713,7 @@ index 1350818..dce8887 100644
    dest[0] = a[0] - b[0];
    dest[1] = a[1] - b[1];
    dest[2] = a[2] - b[2];
-@@ -354,7 +354,7 @@ glm_vec3_mul(vec3 a, vec3 b, vec3 dest) {
+@@ -355,7 +355,7 @@ glm_vec3_mul(vec3 a, vec3 b, vec3 dest) {
   */
  CGLM_INLINE
  void
@@ -722,7 +722,7 @@ index 1350818..dce8887 100644
    dest[0] = v[0] * s;
    dest[1] = v[1] * s;
    dest[2] = v[2] * s;
-@@ -369,7 +369,7 @@ glm_vec3_scale(vec3 v, float s, vec3 dest) {
+@@ -370,7 +370,7 @@ glm_vec3_scale(vec3 v, float s, vec3 dest) {
   */
  CGLM_INLINE
  void
@@ -731,7 +731,7 @@ index 1350818..dce8887 100644
    float norm;
    norm = glm_vec3_norm(v);
  
-@@ -623,7 +623,7 @@ glm_vec3_minsub(vec3 a, vec3 b, vec3 dest) {
+@@ -624,7 +624,7 @@ glm_vec3_minsub(vec3 a, vec3 b, vec3 dest) {
   */
  CGLM_INLINE
  void
@@ -740,7 +740,7 @@ index 1350818..dce8887 100644
    dest[0] = -v[0];
    dest[1] = -v[1];
    dest[2] = -v[2];
-@@ -668,7 +668,7 @@ glm_vec3_normalize(vec3 v) {
+@@ -669,7 +669,7 @@ glm_vec3_normalize(vec3 v) {
   */
  CGLM_INLINE
  void
@@ -749,7 +749,7 @@ index 1350818..dce8887 100644
    float norm;
  
    norm = glm_vec3_norm(v);
-@@ -690,7 +690,7 @@ glm_vec3_normalize_to(vec3 v, vec3 dest) {
+@@ -691,7 +691,7 @@ glm_vec3_normalize_to(vec3 v, vec3 dest) {
   */
  CGLM_INLINE
  void
@@ -758,7 +758,7 @@ index 1350818..dce8887 100644
    vec3 c;
    /* (u2.v3 - u3.v2, u3.v1 - u1.v3, u1.v2 - u2.v1) */
    c[0] = a[1] * b[2] - a[2] * b[1];
-@@ -747,7 +747,7 @@ glm_vec3_angle(vec3 a, vec3 b) {
+@@ -748,7 +748,7 @@ glm_vec3_angle(vec3 a, vec3 b) {
   */
  CGLM_INLINE
  void
@@ -767,7 +767,7 @@ index 1350818..dce8887 100644
    vec3   v1, v2, k;
    float  c, s;
  
-@@ -785,7 +785,7 @@ glm_vec3_rotate(vec3 v, float angle, vec3 axis) {
+@@ -786,7 +786,7 @@ glm_vec3_rotate(vec3 v, float angle, vec3 axis) {
   */
  CGLM_INLINE
  void
@@ -776,7 +776,7 @@ index 1350818..dce8887 100644
    vec4 x, y, z, res;
  
    glm_vec4_normalize_to(m[0], x);
-@@ -808,7 +808,7 @@ glm_vec3_rotate_m4(mat4 m, vec3 v, vec3 dest) {
+@@ -809,7 +809,7 @@ glm_vec3_rotate_m4(mat4 m, vec3 v, vec3 dest) {
   */
  CGLM_INLINE
  void
@@ -786,10 +786,10 @@ index 1350818..dce8887 100644
  
    glm_vec4(m[0], 0.0f, x);
 diff --git a/include/cglm/vec4.h b/include/cglm/vec4.h
-index ded09c9..7efc179 100644
+index f12fa04..d92144f 100644
 --- a/include/cglm/vec4.h
 +++ b/include/cglm/vec4.h
-@@ -117,7 +117,7 @@
+@@ -118,7 +118,7 @@
   */
  CGLM_INLINE
  void
@@ -798,7 +798,7 @@ index ded09c9..7efc179 100644
    dest[0] = v3[0];
    dest[1] = v3[1];
    dest[2] = v3[2];
-@@ -146,7 +146,7 @@ glm_vec4_copy3(vec4 a, vec3 dest) {
+@@ -147,7 +147,7 @@ glm_vec4_copy3(vec4 a, vec3 dest) {
   */
  CGLM_INLINE
  void
@@ -807,7 +807,7 @@ index ded09c9..7efc179 100644
  #if defined(__wasm__) && defined(__wasm_simd128__)
    glmm_store(dest, glmm_load(v));
  #elif defined( __SSE__ ) || defined( __SSE2__ )
-@@ -237,7 +237,7 @@ glm_vec4_one(vec4 v) {
+@@ -238,7 +238,7 @@ glm_vec4_one(vec4 v) {
   */
  CGLM_INLINE
  float
@@ -816,7 +816,7 @@ index ded09c9..7efc179 100644
  #if defined(CGLM_SIMD)
    return glmm_dot(glmm_load(a), glmm_load(b));
  #else
-@@ -258,7 +258,7 @@ glm_vec4_dot(vec4 a, vec4 b) {
+@@ -259,7 +259,7 @@ glm_vec4_dot(vec4 a, vec4 b) {
   */
  CGLM_INLINE
  float
@@ -825,7 +825,7 @@ index ded09c9..7efc179 100644
    return glm_vec4_dot(v, v);
  }
  
-@@ -272,7 +272,7 @@ glm_vec4_norm2(vec4 v) {
+@@ -273,7 +273,7 @@ glm_vec4_norm2(vec4 v) {
   */
  CGLM_INLINE
  float
@@ -834,7 +834,7 @@ index ded09c9..7efc179 100644
  #if defined(CGLM_SIMD)
    return glmm_norm(glmm_load(v));
  #else
-@@ -460,7 +460,7 @@ glm_vec4_mul(vec4 a, vec4 b, vec4 dest) {
+@@ -461,7 +461,7 @@ glm_vec4_mul(vec4 a, vec4 b, vec4 dest) {
   */
  CGLM_INLINE
  void
@@ -843,7 +843,7 @@ index ded09c9..7efc179 100644
  #if defined(__wasm__) && defined(__wasm_simd128__)
    glmm_store(dest, wasm_f32x4_mul(glmm_load(v), wasm_f32x4_splat(s)));
  #elif defined( __SSE__ ) || defined( __SSE2__ )
-@@ -484,7 +484,7 @@ glm_vec4_scale(vec4 v, float s, vec4 dest) {
+@@ -485,7 +485,7 @@ glm_vec4_scale(vec4 v, float s, vec4 dest) {
   */
  CGLM_INLINE
  void
@@ -852,7 +852,7 @@ index ded09c9..7efc179 100644
    float norm;
    norm = glm_vec4_norm(v);
  
-@@ -907,7 +907,7 @@ glm_vec4_negate(vec4 v) {
+@@ -908,7 +908,7 @@ glm_vec4_negate(vec4 v) {
   */
  CGLM_INLINE
  void

@@ -6,7 +6,6 @@
 #ifdef YSM_X64
 
 #include <emmintrin.h>
-#include <tmmintrin.h>
 
 #include <array>
 
@@ -23,20 +22,6 @@ template <unsigned int kBits>
 inline __m128i RotateLeft(__m128i value) noexcept {
     return _mm_or_si128(_mm_slli_epi32(value, kBits),
                         _mm_srli_epi32(value, 32 - kBits));
-}
-
-template <>
-inline __m128i RotateLeft<8>(__m128i value) noexcept {
-    const auto mask =
-        _mm_set_epi8(14, 13, 12, 15, 10, 9, 8, 11, 6, 5, 4, 7, 2, 1, 0, 3);
-    return _mm_shuffle_epi8(value, mask);
-}
-
-template <>
-inline __m128i RotateLeft<16>(__m128i value) noexcept {
-    const auto mask =
-        _mm_set_epi8(13, 12, 15, 14, 9, 8, 11, 10, 5, 4, 7, 6, 1, 0, 3, 2);
-    return _mm_shuffle_epi8(value, mask);
 }
 
 inline void DoubleRound(Rows& rows) noexcept {

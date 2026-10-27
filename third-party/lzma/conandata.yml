@@ -1,13 +1,13 @@
 sources:
-  '25.01':
+  '26.02':
     url: https://github.com/sisong/lzma
-    tag: v25.01
-    commit: 18dab99e5796bd27d1feabcec49708563df7cb98
+    tag: v26.02
+    commit: e7cd7cab6da84a4567fd9216a641abedfa13f086
 patches:
-  '25.01':
+  '26.02':
   - patch_file: patches/lzma.patch
 requirements:
-- mimalloc/3.5.3@ysm/stable
+- mimalloc/3.6.0@ysm/stable
 build:
   global_link_targets:
   - mimalloc-static

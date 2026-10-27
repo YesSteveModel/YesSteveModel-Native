@@ -8,6 +8,6 @@ class ProxyConan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     exports_sources = "patches/*", "src/*"
     name = "proxy"
-    version = "4.0.2"
-    license = ""
+    version = "4.1.0"
+    license = "MIT"
     package_type = "header-library"

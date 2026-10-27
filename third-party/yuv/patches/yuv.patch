@@ -1,8 +1,8 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 77e0527..a5a370c 100644
+index 83211a2..974be80 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -171,9 +171,12 @@ endif()
+@@ -230,9 +230,12 @@ endif()
  
  # this creates the static library (.a)
  add_library( ${ly_lib_static} STATIC ${ly_lib_parts})
@@ -16,10 +16,10 @@ index 77e0527..a5a370c 100644
  set_target_properties( ${ly_lib_shared} PROPERTIES PREFIX "lib" )
  if(WIN32)
 diff --git a/include/libyuv/row.h b/include/libyuv/row.h
-index 529b3d6..9180e52 100644
+index e189d9d..294c9ec 100644
 --- a/include/libyuv/row.h
 +++ b/include/libyuv/row.h
-@@ -17,6 +17,8 @@
+@@ -18,6 +18,8 @@
  #include "libyuv/basic_types.h"
  #include "libyuv/cpu_support.h"
  
@@ -28,14 +28,22 @@ index 529b3d6..9180e52 100644
  #ifdef __cplusplus
  namespace libyuv {
  extern "C" {
-@@ -1043,11 +1045,11 @@ struct ArgbConstants {
- #define IS_ALIGNED(p, a) (!((uintptr_t)(p) & ((a)-1)))
- 
+@@ -1232,19 +1234,19 @@ struct ArgbConstants {
+   size_t var##_mem_size = (size); /* NOLINT */                             \
+   void* var##_mem = (var##_mem_size > SIZE_MAX - 63)                       \
+                         ? NULL                                             \
+-                        : calloc(1, var##_mem_size + 63);     /* NOLINT */ \
++                        : mi_calloc(1, var##_mem_size + 63);     /* NOLINT */ \
+   uint8_t* var = (uint8_t*)(((intptr_t)var##_mem + 63) & ~63) /* NOLINT */
+ #else
  #define align_buffer_64(var, size)                                         \
--  void* var##_mem = malloc((size) + 63);                      /* NOLINT */ \
--  uint8_t* var = (uint8_t*)(((intptr_t)var##_mem + 63) & ~63) /* NOLINT */
-+  void* var##_mem = mi_malloc_aligned((size), 64);                      /* NOLINT */ \
-+  uint8_t* var = (uint8_t*)var##_mem /* NOLINT */
+   size_t var##_mem_size = (size); /* NOLINT */                             \
+   void* var##_mem = (var##_mem_size > SIZE_MAX - 63)                       \
+                         ? NULL                                             \
+-                        : malloc(var##_mem_size + 63);        /* NOLINT */ \
++                        : mi_malloc(var##_mem_size + 63);        /* NOLINT */ \
+   uint8_t* var = (uint8_t*)(((intptr_t)var##_mem + 63) & ~63) /* NOLINT */
+ #endif
  
  #define free_aligned_buffer_64(var) \
 -  free(var##_mem);                  \
@@ -44,10 +52,10 @@ index 529b3d6..9180e52 100644
  
  #if defined(__APPLE__) || defined(__x86_64__) || defined(__llvm__)
 diff --git a/source/convert_to_argb.cc b/source/convert_to_argb.cc
-index 72d21b0..f9ac804 100644
+index bc699b6..d8611dd 100644
 --- a/source/convert_to_argb.cc
 +++ b/source/convert_to_argb.cc
-@@ -22,6 +22,8 @@
+@@ -23,6 +23,8 @@
  #include "libyuv/row.h"
  #include "libyuv/video_common.h"
  
@@ -57,11 +65,11 @@ index 72d21b0..f9ac804 100644
  namespace libyuv {
  extern "C" {
 diff --git a/source/convert_to_i420.cc b/source/convert_to_i420.cc
-index aab071e..bb6521b 100644
+index 67f78b1..6d47b2e 100644
 --- a/source/convert_to_i420.cc
 +++ b/source/convert_to_i420.cc
-@@ -17,6 +17,8 @@
- 
+@@ -21,6 +21,8 @@
+ #include "libyuv/row.h"
  #include "libyuv/video_common.h"
  
 +#include <mimalloc-override.h>
@@ -70,7 +78,7 @@ index aab071e..bb6521b 100644
  namespace libyuv {
  extern "C" {
 diff --git a/source/scale_argb.cc b/source/scale_argb.cc
-index eb6caa5..11acb70 100644
+index dd9df36..e8e4d14 100644
 --- a/source/scale_argb.cc
 +++ b/source/scale_argb.cc
 @@ -22,6 +22,8 @@
@@ -83,7 +91,7 @@ index eb6caa5..11acb70 100644
  namespace libyuv {
  extern "C" {
 diff --git a/source/scale_rgb.cc b/source/scale_rgb.cc
-index 5e69fe3..0718d69 100644
+index 0a2f2f6..31aa181 100644
 --- a/source/scale_rgb.cc
 +++ b/source/scale_rgb.cc
 @@ -22,6 +22,8 @@
@@ -95,16 +103,3 @@ index 5e69fe3..0718d69 100644
  #ifdef __cplusplus
  namespace libyuv {
  extern "C" {
-diff --git a/source/row_win.cc b/source/row_win.cc
---- a/source/row_win.cc
-+++ b/source/row_win.cc
-@@ -366,5 +366,9 @@ void RGB24ToARGBRow_AVX512BW(const uint8_t* src_rgb24, uint8_t* dst_argb, int w
- #ifdef HAS_ARGBTOUVMATRIXROW_AVX2
-+#if defined(__clang__) || defined(__GNUC__)
- LIBYUV_TARGET_AVX2 __attribute__((no_sanitize("cfi-icall")))
-+#else
-+LIBYUV_TARGET_AVX2
-+#endif
- void ARGBToUVMatrixRow_AVX2(const uint8_t* src_argb,
-                             int src_stride_argb,
-                             uint8_t* dst_u,

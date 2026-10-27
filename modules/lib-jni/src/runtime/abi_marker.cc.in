@@ -1,0 +1,7 @@
+#if defined(_WIN32)
+#define YSM_ABI_EXPORT __declspec(dllexport)
+#else
+#define YSM_ABI_EXPORT __attribute__((visibility("default"), used))
+#endif
+
+extern "C" YSM_ABI_EXPORT const unsigned char @YSM_NATIVE_ABI_SYMBOL@ = 0;

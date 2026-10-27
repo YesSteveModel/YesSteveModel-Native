@@ -9,6 +9,8 @@ class BufferManaged final : public BufferBase<BufferManaged> {
     size_t size_;
 
    public:
+    using value_type = Byte;
+
     struct OwnFlag {};
 
     using OwnedMem = BufferView;

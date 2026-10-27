@@ -4,6 +4,7 @@
 
 #include <java/buffer.h>
 #include <java/entry.h>
+#include <java/opaque_ptr.h>
 
 #include <legacy/v3.h>
 
@@ -26,28 +27,19 @@ absl::StatusOr<jobject> Import(JNIEnv_* env, jobject source,
     }
     return NewSuccessResult(env, std::move(result).value());
 }
-
-absl::Status Release(JNIEnv_*, jlong handle) {
-    if (handle == 0) {
-        return absl::InvalidArgumentError("Legacy result handle is zero");
-    }
-    auto* owner =
-        reinterpret_cast<ResultOwner*>(static_cast<std::intptr_t>(handle));
-    delete owner;
-    return absl::OkStatus();
-}
 }  // namespace
 
 YSM_JNI_ENTRY(
     "Lcom/elfmcys/ysm/natives/legacy/NativeLegacyImporter;nImport(Ljava/lang/"
-    "Object;J)Lcom/elfmcys/ysm/natives/legacy/NativeLegacyImportResult;",
+    "Object;J)Lcom/elfmcys/ysm/natives/legacy/NativeLegacyImportResult$Output;",
     (source, source_flags)) {
     return Import(env, source, source_flags);
 }
 
-YSM_JNI_ENTRY(
-    "Lcom/elfmcys/ysm/natives/legacy/NativeLegacyImporter;nRelease(J)V",
-    (handle)) {
-    return Release(env, handle);
+YSM_JNI_ENTRY("Lcom/elfmcys/ysm/natives/legacy/NativeLegacyImporter;nShare(J)J",
+              (handle)) {
+    YSM_ASSERT(handle != 0,
+               absl::InvalidArgumentError("Legacy result handle is zero"));
+    return ::ysm::java::ShareOpaquePtr(handle);
 }
 }  // namespace ysm::legacy::java

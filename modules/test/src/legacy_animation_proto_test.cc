@@ -33,7 +33,6 @@ constexpr std::string_view kFrozenFieldSevenWire =
 TEST(LegacyAnimationProtoTest, MatchesFrozenFieldSevenWireAndOrder) {
     animation_proto::Animation animation{};
     animation.length = 0.0F;
-    animation.loop = animation_proto::LoopType::LOOP_TYPE_UNSPECIFIED;
     animation.sound_keyframes.emplace_back(
         "\xE6\xA8\xA1\xE5\x9E\x8B\x3A\xE9\x93\x83", 0.0F);
     animation.sound_keyframes.emplace_back("", 1.25F);
@@ -129,7 +128,7 @@ TEST(LegacyAnimationProtoTest, PreservesStructuredCubesBytesWire) {
 TEST(LegacyAnimationProtoTest, PreservesSoundFrameValuesAndOrder) {
     animation_proto::Animation source{};
     source.length = 0.0F;
-    source.loop = animation_proto::LoopType::LOOP_TYPE_UNSPECIFIED;
+    source.loop = animation_proto::LoopType::kUnspecified;
     source.sound_keyframes.emplace_back("minecraft:bell", 1.25F);
     source.sound_keyframes.emplace_back(
         "\xE6\xA8\xA1\xE5\x9E\x8B\x3A\xE9\x93\x83", 1.25F);

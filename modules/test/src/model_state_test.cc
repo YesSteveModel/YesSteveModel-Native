@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <future>
 #include <memory>
 #include <numbers>
 #include <ranges>
@@ -12,6 +13,7 @@
 #include "buffer.h"
 #include "cpu.h"
 #include "gfx/bake/baked_model.h"
+#include "gfx/bake/baked_serializer.h"
 #include "gfx/renderer/model_state.h"
 #include "gfx/renderer/render.h"
 #include "renderer/vertex/iris_56.h"
@@ -153,6 +155,28 @@ std::vector<gfx::renderer::BoneAttribute> MakeFlatAttributes(size_t bone_count) 
 }
 }  // namespace
 
+TEST(ModelStateTest, ConcurrentSerializationBorrowsOnlyImmutableGeometry) {
+    InitCpuInfo();
+    auto model = MakeFlatModel(4);
+    auto attributes = MakeFlatAttributes(4);
+    auto serializing = std::async(std::launch::async, [model] {
+        for (int iteration = 0; iteration < 100; ++iteration) {
+            auto bytes = gfx::bake::SerializeBakedModel(*model);
+            if (bytes.size() != gfx::bake::BakedModelSerializationBytes(*model))
+                return false;
+        }
+        return true;
+    });
+    gfx::renderer::ModelState state;
+    for (int iteration = 0; iteration < 100; ++iteration) {
+        auto result =
+            state.Extract(kGenericTag, model, attributes, attributes.size());
+        ASSERT_TRUE(result.ok()) << result.status();
+        EXPECT_EQ(result->vertex_count, 16);
+    }
+    EXPECT_TRUE(serializing.get());
+}
+
 TEST(ModelStateTest, ExtractsPoseLocatorsAndReusesSchedule) {
     InitCpuInfo();
 #ifdef YSM_X64
@@ -205,6 +229,84 @@ TEST(ModelStateTest, ExtractsPoseLocatorsAndReusesSchedule) {
     ASSERT_TRUE(switched.ok()) << switched.status();
     EXPECT_TRUE(switched->schedule_updated);
     EXPECT_EQ(state.Model(), other_model);
+}
+
+TEST(ModelStateTest, LocalRootIgnoresAllExternalAncestorAttributes) {
+    auto model = MakeModel();
+    auto attributes = MakeAttributes();
+    attributes[1].rotation[2] = std::numbers::pi_v<float> * 0.5f;
+    attributes[1].scale[0] = 2.0f;
+    gfx::renderer::ModelState state;
+    for (const auto ancestor : std::array<gfx::renderer::BoneAttribute, 6>{
+             attributes[0],
+             {.position = {16, 32, 48}},
+             {.rotation = {0.3f, 0.6f, 0.9f}},
+             {.scale = {2, 3, 4}},
+             {.scale = {0, 0, 0}},
+             {.children_hidden = 1}}) {
+        attributes[0] = ancestor;
+        // Invalid packed data outside the range must not be read either.
+        attributes[0].color = -1;
+        auto result = state.ExtractSubtree(kGenericTag, model, attributes, 4, 1);
+        ASSERT_TRUE(result.ok()) << result.status();
+        EXPECT_EQ(result->vertex_count, 4);
+        EXPECT_EQ(result->locator_count, 1);
+        EXPECT_EQ(state.StagedLocatorBoneIndices(1)[0], 2);
+        EXPECT_TRUE(std::ranges::equal(state.PoseView().render_bone_indices,
+                                       std::array<uint16_t, 1>{1}));
+        const auto poses = state.PoseView().bone_poses;
+        EXPECT_NEAR(poses[1].pose[0][1], 2, 0.00001f);
+        EXPECT_NEAR(poses[1].pose[1][0], -1, 0.00001f);
+        EXPECT_NEAR(poses[1].pose[3][0], 1, 0.00001f);
+        EXPECT_NEAR(poses[1].pose[3][1], -2, 0.00001f);
+        EXPECT_NEAR(poses[1].normal[0][1], 0.5f, 0.00001f);
+        EXPECT_NEAR(poses[1].normal[1][0], -1, 0.00001f);
+        EXPECT_NEAR(poses[2].pose[0][1], 2, 0.00001f);
+    }
+}
+
+TEST(ModelStateTest, LocalRangesRebuildEqualSizedSchedulesAndRecoverAfterFailure) {
+    auto model = MakeModel();
+    auto attributes = MakeAttributes();
+    gfx::renderer::ModelState state;
+    for (const size_t root : {1u, 3u, 1u}) {
+        auto result = state.ExtractSubtree(kGenericTag, model, attributes, 4, root);
+        ASSERT_TRUE(result.ok()) << result.status();
+        EXPECT_TRUE(result->schedule_updated);
+        EXPECT_EQ(result->vertex_count, 4);
+        EXPECT_EQ(state.PoseView().render_bone_indices[0], root);
+    }
+    auto reused = state.ExtractSubtree(kGenericTag, model, attributes, 4, 1);
+    ASSERT_TRUE(reused.ok());
+    EXPECT_FALSE(reused->schedule_updated);
+    for (const size_t root : std::array<size_t, 2>{4, std::numeric_limits<size_t>::max()}) {
+        EXPECT_FALSE(state.ExtractSubtree(kGenericTag, model, attributes, 4, root).ok());
+        EXPECT_FALSE(state.IsValid());
+        gfx::renderer::RenderParameters parameters{};
+        EXPECT_EQ(gfx::renderer::Render({}, gfx::renderer::VertexKind::kVanilla,
+                                       state, parameters).code(),
+                  absl::StatusCode::kFailedPrecondition);
+    }
+    ASSERT_TRUE(state.ExtractSubtree(kGenericTag, model, attributes, 4, 1).ok());
+    state.Invalidate();
+    EXPECT_FALSE(state.IsValid());
+    attributes[1].cubes_hidden = 1;
+    auto empty = state.ExtractSubtree(kGenericTag, model, attributes, 4, 1);
+    ASSERT_TRUE(empty.ok());
+    EXPECT_TRUE(state.IsValid());
+    EXPECT_EQ(empty->vertex_count, 0);
+    EXPECT_EQ(empty->locator_count, 1);
+    attributes[1].children_hidden = 1;
+    empty = state.ExtractSubtree(kGenericTag, model, attributes, 4, 1);
+    ASSERT_TRUE(empty.ok());
+    EXPECT_EQ(empty->locator_count, 0);
+    attributes[1].scale[0] = 0;
+    empty = state.ExtractSubtree(kGenericTag, model, attributes, 4, 1);
+    ASSERT_TRUE(empty.ok());
+    EXPECT_EQ(empty->vertex_count, 0);
+    EXPECT_EQ(empty->locator_count, 0);
+    EXPECT_FALSE(state.ExtractSubtree(kGenericTag, model, attributes, 3, 1).ok());
+    EXPECT_FALSE(state.IsValid());
 }
 
 TEST(ModelStateTest, ExtractsIndependentBoneRenderAttributes) {
@@ -445,6 +547,51 @@ TEST(ModelStateTest, SnapshotRendersRepeatedlyWithTrustedNormalizedNormal) {
     EXPECT_EQ(shadow_vertices[0].tangent, 0U);
 }
 
+TEST(ModelStateTest, RenderReportsFailureProvenanceAndRetainsScheduleAcrossFrames) {
+    InitCpuInfo();
+#ifdef YSM_X64
+    simd::Mock(simd::Type::SSE41);
+#endif
+    auto model = MakeModel();
+    auto attributes = MakeAttributes();
+    gfx::renderer::ModelState state;
+    auto extracted = state.ExtractSubtree(kGenericTag, model, attributes, attributes.size(), 1);
+    ASSERT_TRUE(extracted.ok());
+    EXPECT_TRUE(extracted->schedule_updated);
+    gfx::renderer::RenderParameters parameters{};
+    glm_mat4_identity(parameters.model);
+    glm_mat4_identity(parameters.view);
+    glm_mat4_identity(parameters.projection);
+    glm_mat3_identity(parameters.normal);
+    parameters.ctx = gfx::renderer::RenderContext::kLevel;
+    parameters.color.packed = 0xffffffff;
+    std::vector<Byte> output(extracted->vertex_count * gfx::renderer::vertex::VanillaVertex::kSize);
+    gfx::renderer::RenderResult result;
+    EXPECT_FALSE(gfx::renderer::Render({}, gfx::renderer::VertexKind::kVanilla, state, parameters, result).ok());
+    EXPECT_EQ(result, gfx::renderer::RenderResult::kOutputRejected);
+    EXPECT_TRUE(state.IsValid());
+    parameters.normal[0][0] = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(gfx::renderer::Render(output, gfx::renderer::VertexKind::kVanilla, state, parameters, result).ok());
+    EXPECT_EQ(result, gfx::renderer::RenderResult::kOutputRejected);
+    glm_mat3_identity(parameters.normal);
+    ASSERT_TRUE(gfx::renderer::Render(output, gfx::renderer::VertexKind::kVanilla, state, parameters, result).ok());
+    EXPECT_EQ(result, gfx::renderer::RenderResult::kSuccess);
+    EXPECT_TRUE(state.IsValid());
+    attributes[1].position[0] += 16;
+    auto next_frame = state.ExtractSubtree(kGenericTag, model, attributes, attributes.size(), 1);
+    ASSERT_TRUE(next_frame.ok());
+    EXPECT_FALSE(next_frame->schedule_updated);
+    auto& damaged = const_cast<gfx::renderer::BonePose&>(state.PoseView().bone_poses[1]);
+    damaged.pose[0][0] = std::numeric_limits<float>::infinity();
+    EXPECT_FALSE(gfx::renderer::Render(output, gfx::renderer::VertexKind::kVanilla, state, parameters, result).ok());
+    EXPECT_EQ(result, gfx::renderer::RenderResult::kStateInvalid);
+    ASSERT_TRUE(state.ExtractSubtree(kGenericTag, model, attributes, attributes.size(), 1).ok());
+    ASSERT_TRUE(gfx::renderer::Render(output, gfx::renderer::VertexKind::kVanilla, state, parameters, result).ok());
+    state.Invalidate();
+    EXPECT_FALSE(gfx::renderer::Render(output, gfx::renderer::VertexKind::kVanilla, state, parameters, result).ok());
+    EXPECT_EQ(result, gfx::renderer::RenderResult::kStateInvalid);
+}
+
 TEST(ModelStateTest, ProductionPolicyRendersPrewakeAndWorkerReadySchedules) {
     InitCpuInfo();
 #ifdef YSM_X64
@@ -526,5 +673,135 @@ TEST(ModelStateTest, ProductionPolicyRendersPrewakeAndWorkerReadySchedules) {
                                  gfx::renderer::VertexKind::kVanilla,
                                  worker_ready_state, parameters)
                     .ok());
+}
+
+TEST(ModelStateTest, CompositionOverflowRetainsPublicationAndDamageWinsInEveryMode) {
+    InitCpuInfo();
+#ifdef YSM_X64
+    simd::Mock(simd::Type::SSE41);
+#endif
+    using Mode = gfx::renderer::RenderSchedulingMode;
+    using Result = gfx::renderer::RenderResult;
+    for (const auto mode : {Mode::kInline, Mode::kSerialLateWake,
+                            Mode::kSerialPrewake, Mode::kWorkerReadySpin}) {
+        SCOPED_TRACE(static_cast<int>(mode));
+        const auto bone_count = mode == Mode::kInline ? 2 : 224;
+        auto model = MakeFlatModel(bone_count);
+        auto attributes = MakeFlatAttributes(bone_count);
+        attributes[0].scale[0] = 4;
+        gfx::renderer::ModelState state;
+        auto extracted = state.Extract(kGenericTag, model, attributes, attributes.size());
+        ASSERT_TRUE(extracted.ok());
+        auto& schedule = const_cast<gfx::renderer::RenderSchedule&>(state.Schedule());
+        // Keep the real task/owner partition, varying only the execution policy.
+        schedule.mode = mode;
+        std::vector<Byte> output(extracted->vertex_count *
+                                gfx::renderer::vertex::VanillaVertex::kSize);
+        gfx::renderer::RenderParameters parameters{};
+        glm_mat4_identity(parameters.model);
+        glm_mat4_identity(parameters.view);
+        glm_mat4_identity(parameters.projection);
+        glm_mat3_identity(parameters.normal);
+        parameters.ctx = gfx::renderer::RenderContext::kLevel;
+        parameters.color.packed = 0xffffffff;
+        Result result;
+        ASSERT_TRUE(gfx::renderer::Render(output, gfx::renderer::VertexKind::kVanilla,
+                                         state, parameters, result).ok());
+        const auto* published = state.PoseView().bone_poses.data();
+        parameters.model[0][0] = std::numeric_limits<float>::max() / 2;
+        parameters.normal[0][0] = 1 / parameters.model[0][0];
+        ASSERT_FALSE(gfx::renderer::Render(output, gfx::renderer::VertexKind::kVanilla,
+                                          state, parameters, result).ok());
+        EXPECT_EQ(result, Result::kOutputRejected);
+        EXPECT_TRUE(state.IsValid());
+        EXPECT_EQ(published, state.PoseView().bone_poses.data());
+        auto& damaged = const_cast<gfx::renderer::BonePose&>(
+            state.PoseView().bone_poses.back());
+        const auto previous = damaged.pose[0][0];
+        damaged.pose[0][0] = std::numeric_limits<float>::infinity();
+        ASSERT_FALSE(gfx::renderer::Render(output, gfx::renderer::VertexKind::kVanilla,
+                                          state, parameters, result).ok());
+        EXPECT_EQ(result, Result::kStateInvalid);
+        damaged.pose[0][0] = previous;
+        glm_mat4_identity(parameters.model);
+        glm_mat3_identity(parameters.normal);
+        ASSERT_TRUE(gfx::renderer::Render(output, gfx::renderer::VertexKind::kVanilla,
+                                         state, parameters, result).ok());
+        EXPECT_EQ(result, Result::kSuccess);
+        EXPECT_EQ(published, state.PoseView().bone_poses.data());
+    }
+}
+
+TEST(ModelStateTest, ThreePersistentOutputsReuseSchedulesAndBoundPoseStorage) {
+    InitCpuInfo();
+#ifdef YSM_X64
+    // MakeFlatModel builds B128 groups regardless of the host ISA.
+    simd::Mock(simd::Type::SSE41);
+#endif
+    auto model = MakeFlatModel(96);
+    auto attributes = MakeFlatAttributes(96);
+    std::array<gfx::renderer::ModelState, 3> states;
+    std::array<std::vector<Byte>, 3> buffers;
+    std::array<const gfx::renderer::BonePose*, 3> poses{};
+    size_t extracts = 0;
+    size_t rebuilds = 0;
+    for (size_t index = 0; index < states.size(); ++index) {
+        auto result = states[index].ExtractSubtree(
+                kGenericTag, model, attributes, attributes.size(), index);
+        ASSERT_TRUE(result.ok()) << result.status();
+        ++extracts;
+        rebuilds += result->schedule_updated;
+        ASSERT_EQ(result->vertex_count, 4);
+        EXPECT_EQ(states[index].PoseView().bone_poses.size(), 96);
+        poses[index] = states[index].PoseView().bone_poses.data();
+        buffers[index].resize(4 * gfx::renderer::vertex::VanillaVertex::kSize);
+    }
+    EXPECT_EQ(extracts, 3);
+    EXPECT_EQ(rebuilds, 3);
+    EXPECT_NE(poses[0], poses[1]);
+    EXPECT_NE(poses[1], poses[2]);
+
+    gfx::renderer::RenderParameters parameters{};
+    glm_mat4_identity(parameters.model);
+    glm_mat4_identity(parameters.view);
+    glm_mat4_identity(parameters.projection);
+    glm_mat3_identity(parameters.normal);
+    parameters.ctx = gfx::renderer::RenderContext::kLevel;
+    parameters.color.packed = 0xffffffff;
+    for (const auto index : std::array<size_t, 5>{0, 1, 2, 0, 1}) {
+        ASSERT_TRUE(gfx::renderer::Render(buffers[index],
+                gfx::renderer::VertexKind::kVanilla, states[index], parameters).ok());
+        EXPECT_TRUE(states[index].IsValid());
+        EXPECT_EQ(states[index].PoseView().bone_poses.data(), poses[index]);
+    }
+    EXPECT_EQ(extracts, 3);
+    EXPECT_EQ(rebuilds, 3);
+
+    attributes[0].position[0] = 0.25f;
+    for (size_t index = 0; index < states.size(); ++index) {
+        auto result = states[index].ExtractSubtree(
+                kGenericTag, model, attributes, attributes.size(), index);
+        ASSERT_TRUE(result.ok()) << result.status();
+        ++extracts;
+        rebuilds += result->schedule_updated;
+        EXPECT_FALSE(result->schedule_updated);
+        EXPECT_EQ(states[index].PoseView().bone_poses.data(), poses[index]);
+    }
+    EXPECT_EQ(extracts, 6);
+    EXPECT_EQ(rebuilds, 3);
+
+    attributes[0].cubes_hidden = 1.0f;
+    for (size_t index = 0; index < states.size(); ++index) {
+        auto result = states[index].ExtractSubtree(
+                kGenericTag, model, attributes, attributes.size(), index);
+        ASSERT_TRUE(result.ok()) << result.status();
+        ++extracts;
+        rebuilds += result->schedule_updated;
+        EXPECT_EQ(result->schedule_updated, index == 0);
+        EXPECT_EQ(result->vertex_count, index == 0 ? 0 : 4);
+        EXPECT_EQ(states[index].PoseView().bone_poses.data(), poses[index]);
+    }
+    EXPECT_EQ(extracts, 9);
+    EXPECT_EQ(rebuilds, 4);
 }
 }  // namespace ysm::test

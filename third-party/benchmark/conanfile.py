@@ -8,7 +8,7 @@ class GoogleBenchmarkConan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     exports_sources = "patches/*", "src/*"
     name = "benchmark"
-    version = "1.9.5"
+    version = "1.10.0"
     license = "Apache-2.0"
     description = "A microbenchmark support library"
     homepage = "https://github.com/google/benchmark"
@@ -22,13 +22,13 @@ class GoogleBenchmarkConan(ConanFile):
 
         benchmark = self.cpp_info.components["benchmark"]
         benchmark.defines = ["BENCHMARK_STATIC_DEFINE"]
-        if self.settings.os == "Windows":
+        if self._target_os == "windows":
             benchmark.system_libs = ["shlwapi"]
-        elif self.settings.os == "Linux":
+        elif self._target_os == "linux":
             benchmark.system_libs = ["pthread", "rt"]
-        elif self.settings.os == "FreeBSD":
+        elif self._target_os == "freebsd":
             benchmark.system_libs = ["pthread"]
-        elif self.settings.os == "SunOS":
+        elif self._target_os == "sunos":
             benchmark.system_libs = ["pthread", "rt", "kstat"]
 
         self.cpp_info.components["benchmark_main"].requires = ["benchmark"]

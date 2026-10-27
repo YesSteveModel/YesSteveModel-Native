@@ -1,14 +1,10 @@
-Index: CMakeLists.txt
-IDEA additional info:
-Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
-<+>UTF-8
-===================================================================
 diff --git a/CMakeLists.txt b/CMakeLists.txt
---- a/CMakeLists.txt	(revision e1dbfa7be7b7e54922020051dc77781e92739700)
-+++ b/CMakeLists.txt	(date 1782491550626)
-@@ -744,14 +744,8 @@
-       unset(SPNG_LIBRARY)
-     endif()
+index a1293db..2f58481 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -749,14 +749,8 @@ if(WITH_TURBOJPEG OR WITH_TOOLS OR WITH_TESTS)
+     set(SPNG_STATIC_SOURCES $<TARGET_OBJECTS:spng-static>)
+     unset(SPNG_LIBRARY)
    endif()
 -  if(WITH_SYSTEM_ZLIB OR WITH_SYSTEM_SPNG)
 -    find_package(ZLIB REQUIRED)
@@ -21,5 +17,5 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
 +  unset(ZLIB_STATIC_SOURCES)
 +  set(ZLIB_LIBRARY zlib-ng-static)
  endif()
-
+ 
  if(ENABLE_SHARED)

@@ -1,13 +1,13 @@
 sources:
-  1.5.3:
+  1.5.4:
     url: https://github.com/videolan/dav1d
-    tag: 1.5.3
-    commit: b546257f770768b2c88258c533da38b91a06f737
+    tag: 1.5.4
+    commit: 54706fc6bc0cdecab7e9593974a4039cc038fca7
 patches:
-  1.5.3:
+  1.5.4:
   - patch_file: patches/dav1d.patch
 requirements:
-- mimalloc/3.5.3@ysm/stable
+- mimalloc/3.6.0@ysm/stable
 build:
   global_link_targets:
   - mimalloc-static

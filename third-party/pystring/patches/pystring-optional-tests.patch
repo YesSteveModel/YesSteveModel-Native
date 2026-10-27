@@ -1,0 +1,37 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index be8c306..83f0d3b 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -87,17 +87,21 @@ install(FILES
+     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/pystring
+ )
+ 
+-# --- Tests ---
+-add_executable(pystring_test test.cpp)
+-target_link_libraries(pystring_test pystring)
++option(BUILD_TESTING "Build tests" OFF)
+ 
+-add_executable(pystring_test_header_only test.cpp)
+-target_link_libraries(pystring_test_header_only pystring_header_only)
++if(BUILD_TESTING)
++    # --- Tests ---
++    add_executable(pystring_test test.cpp)
++    target_link_libraries(pystring_test pystring)
+ 
+-# Compile-time check that PYSTRING_HEADER_ONLY propagates correctly
+-add_executable(pystring_test_header_only_define test_header_only_define.cpp)
+-target_link_libraries(pystring_test_header_only_define pystring_header_only)
++    add_executable(pystring_test_header_only test.cpp)
++    target_link_libraries(pystring_test_header_only pystring_header_only)
+ 
+-enable_testing()
+-add_test(NAME PyStringTest COMMAND pystring_test)
+-add_test(NAME PyStringTestHeaderOnly COMMAND pystring_test_header_only)
++    # Compile-time check that PYSTRING_HEADER_ONLY propagates correctly
++    add_executable(pystring_test_header_only_define test_header_only_define.cpp)
++    target_link_libraries(pystring_test_header_only_define pystring_header_only)
++
++    enable_testing()
++    add_test(NAME PyStringTest COMMAND pystring_test)
++    add_test(NAME PyStringTestHeaderOnly COMMAND pystring_test_header_only)
++endif()

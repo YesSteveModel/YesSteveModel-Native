@@ -1,7 +1,3 @@
-#if defined(YSM_LINUX) && !defined(_GNU_SOURCE)
-#define _GNU_SOURCE
-#endif
-
 #include "cpu_topology.h"
 
 #include <algorithm>
@@ -134,15 +130,32 @@ std::optional<size_t> ReadSysctlSize(const char* name) {
 
 std::optional<CpuTopology> DetectCpuTopology() {
 #if YSM_WINDOWS
+    using QueryCpuSets = BOOL(WINAPI*)(PSYSTEM_CPU_SET_INFORMATION, ULONG,
+                                      PULONG, HANDLE, ULONG);
+    using BindCpuSets = BOOL(WINAPI*)(HANDLE, const ULONG*, ULONG);
+
+    // Kernel32 stays loaded for the process lifetime; CPU Sets are optional
+    // because the library must also load on Windows 7.
+    const auto kernel32 = GetModuleHandleW(L"kernel32.dll");
+    if (kernel32 == nullptr) {
+        return std::nullopt;
+    }
+    const auto query_cpu_sets = reinterpret_cast<QueryCpuSets>(
+        GetProcAddress(kernel32, "GetSystemCpuSetInformation"));
+    const auto bind_cpu_sets = reinterpret_cast<BindCpuSets>(
+        GetProcAddress(kernel32, "SetThreadSelectedCpuSets"));
+    if (query_cpu_sets == nullptr || bind_cpu_sets == nullptr) {
+        return std::nullopt;
+    }
+
     ULONG buffer_size = 0;
-    if (GetSystemCpuSetInformation(nullptr, 0, &buffer_size,
-                                   GetCurrentProcess(), 0) ||
+    if (query_cpu_sets(nullptr, 0, &buffer_size, GetCurrentProcess(), 0) ||
         GetLastError() != ERROR_INSUFFICIENT_BUFFER || buffer_size == 0) {
         return std::nullopt;
     }
 
     std::vector<std::byte> buffer(buffer_size);
-    if (!GetSystemCpuSetInformation(
+    if (!query_cpu_sets(
             reinterpret_cast<PSYSTEM_CPU_SET_INFORMATION>(buffer.data()),
             buffer_size, &buffer_size, GetCurrentProcess(), 0)) {
         return std::nullopt;
@@ -214,8 +227,9 @@ std::optional<CpuTopology> DetectCpuTopology() {
     result.performance_core_count = performance_cores.size();
     auto failure_reported = MakeFailureFlag();
     result.bind_current_thread_to_performance_cores =
-        [cpu_sets = std::move(performance_cpu_sets), failure_reported] {
-            if (SetThreadSelectedCpuSets(
+        [cpu_sets = std::move(performance_cpu_sets), failure_reported,
+         bind_cpu_sets] {
+            if (bind_cpu_sets(
                     GetCurrentThread(), cpu_sets.data(),
                     static_cast<ULONG>(cpu_sets.size()))) {
                 return;

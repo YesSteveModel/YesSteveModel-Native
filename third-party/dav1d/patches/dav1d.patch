@@ -1,13 +1,13 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
 new file mode 100644
-index 0000000..82f7ae6
+index 0000000..574e7c4
 --- /dev/null
 +++ b/CMakeLists.txt
 @@ -0,0 +1,624 @@
 +cmake_minimum_required(VERSION 3.20)
 +
 +project(dav1d
-+    VERSION 1.5.3
++    VERSION 1.5.4
 +    LANGUAGES C
 +)
 +
@@ -629,7 +629,7 @@ index 0000000..82f7ae6
 +    target_link_libraries(dav1d PUBLIC Threads::Threads)
 +endif()
 diff --git a/src/mem.h b/src/mem.h
-index 0ff7deb..ad81fa8 100644
+index f092558..c41bf14 100644
 --- a/src/mem.h
 +++ b/src/mem.h
 @@ -32,16 +32,14 @@
@@ -704,4 +704,3 @@ index 0ff7deb..ad81fa8 100644
  #define dav1d_free_aligned(ptr) dav1d_free_aligned_internal(ptr)
  #endif /* TRACK_HEAP_ALLOCATIONS */
  
-

@@ -1,33 +1,33 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index cda82b0..bb24e6a 100644
+index 5c3877a..9ba33d9 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -141,11 +141,7 @@ set_local_or_system_option(
+@@ -138,11 +138,7 @@ set_local_or_system_option(
  # Whether the libavif library uses c++ indirectly (e.g. through linking to libyuv).
  set(AVIF_LIB_USE_CXX OFF)
-
+ 
 -if(APPLE)
 -    set(XCRUN xcrun)
 -else()
 -    set(XCRUN)
 -endif()
 +set(XCRUN)
-
+ 
  # This is also needed to get shared libraries (e.g. pixbufloader-avif) to compile against a static libavif.
  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-@@ -226,7 +222,10 @@ endif()
+@@ -223,7 +219,10 @@ endif()
  set_local_or_system_option("LIBYUV" "SYSTEM" "Use libyuv.")
  # check_avif_option libyuv must precede libaom because the latter needs to link against the former
  # when building libaom locally
 -check_avif_option(AVIF_LIBYUV TARGET yuv::yuv PKG_NAME libyuv)
 +if (AVIF_LIBYUV)
 +    set(AVIF_LIBYUV_ENABLED ON)
-+    set(LIBYUV_VERSION 1941)
++    set(LIBYUV_VERSION 1974)
 +endif ()
  if(AVIF_LIBYUV_ENABLED)
      # libyuv 1755 exposed all of the I*Matrix() functions, which libavif relies on.
      # libyuv 1774 exposed ScalePlane_12 function, which libavif can use for some additional optimizations.
-@@ -246,18 +245,20 @@ if(AVIF_LIBYUV_ENABLED)
+@@ -243,18 +242,20 @@ if(AVIF_LIBYUV_ENABLED)
  endif()
  if(AVIF_LIBYUV_ENABLED)
      target_compile_definitions(avif_obj PRIVATE -DAVIF_LIBYUV_ENABLED=1)
@@ -51,7 +51,7 @@ index cda82b0..bb24e6a 100644
  endif(AVIF_LIBSHARPYUV_ENABLED)
  
  set_local_or_system_option(
-@@ -288,28 +289,6 @@ if(MSVC)
+@@ -285,28 +286,6 @@ if(MSVC)
      # Disable deprecation warnings about POSIX function names such as setmode (replaced by the ISO C and C++ conformant name _setmode).
      # Disable deprecation warnings about unsafe CRT library functions such as fopen (replaced by fopen_s).
      target_compile_definitions(avif_enable_warnings INTERFACE _CRT_NONSTDC_NO_WARNINGS _CRT_SECURE_NO_WARNINGS)
@@ -80,7 +80,7 @@ index cda82b0..bb24e6a 100644
  elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
      message(STATUS "libavif: Enabling warnings for Clang")
      target_compile_options(
-@@ -453,16 +432,14 @@ if(NOT AVIF_LIBYUV_ENABLED)
+@@ -450,16 +429,14 @@ if(NOT AVIF_LIBYUV_ENABLED)
      endif()
  endif()
  
@@ -101,7 +101,7 @@ index cda82b0..bb24e6a 100644
  
      message(STATUS "libavif: Codec enabled: dav1d (decode)")
      set(AVIF_PKG_CONFIG_EXTRA_REQUIRES_PRIVATE "${AVIF_PKG_CONFIG_EXTRA_REQUIRES_PRIVATE} dav1d")
-@@ -499,7 +476,9 @@ if(AVIF_CODEC_AVM)
+@@ -496,7 +473,9 @@ if(AVIF_CODEC_AVM)
      enable_language(ASM)
  endif()
  
@@ -118,7 +118,7 @@ index 0a98965..654eed4 100644
 +++ b/cmake/Modules/merge_static_libs.cmake
 @@ -87,12 +87,12 @@ function(merge_static_libs target in_target)
      add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E remove $<TARGET_FILE:${target}>)
-
+ 
      if(APPLE)
 -        add_custom_command(
 -            TARGET ${target}

@@ -33,5 +33,8 @@ target_link_libraries(ysm-codec
         spng_static
         webp
         opus
+        Ogg::ogg
+        Vorbis::vorbis
+        SpeexDSP::resampler
         blake3
         cryptopp)

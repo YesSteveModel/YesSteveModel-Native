@@ -468,7 +468,7 @@ absl::StatusOr<model_proto::GeoModelsEntry> ProjectGeoEntry(
         ProjectFloat(source.properties.texture_width, "texture width"));
     model_proto::GeoModelsEntry result{};
     result.key = std::move(key);
-    YSM_RETURN_IF_ERROR(SerializeProto(geometry, "geometry", result.value));
+    result.value = std::move(geometry);
     return result;
 }
 
@@ -718,6 +718,12 @@ absl::StatusOr<info_proto::Settings> ProjectInfoSettings(
     YSM_ASSIGN_OR_RETURN(
         result.extra_animation,
         ProjectStringMap(source.extra_animation, "extra animations"));
+    if (result.extra_animation.empty()) {
+        for (int index = 0; index < 8; ++index) {
+            result.extra_animation.emplace_back("extra" + std::to_string(index),
+                                                "");
+        }
+    }
     result.extra_animation_buttons.reserve(
         source.extra_animation_buttons.size());
     for (const auto& source_button : source.extra_animation_buttons) {
@@ -769,7 +775,7 @@ absl::StatusOr<TargetProjection> ProjectPlayer(
     TargetProjection result{};
     result.manifest.target_id = "player";
     result.manifest.kind =
-        asset_proto::RenderTargetKind::RENDER_TARGET_KIND_PLAYER;
+        asset_proto::RenderTargetKind::kPlayer;
     result.manifest.blob_id = blob_id;
     result.manifest.settings = ProjectModelSettings(properties);
 
@@ -1023,12 +1029,12 @@ absl::StatusOr<info_proto::Info> ProjectInfo(container::LegacyModel& model,
     if (thumb_button != nullptr) {
         YSM_RETURN_IF_ERROR(images.AddNamed(
             *thumb_button, ImageRole::kThumbnail, "thumb-button"));
-        result.thumbnail_source = info_proto::PreviewSource::PREVIEW_SOURCE_RAW;
+        result.thumbnail_source = info_proto::PreviewSource::kRaw;
     }
     if (thumb_icon != nullptr) {
         YSM_RETURN_IF_ERROR(
             images.AddNamed(*thumb_icon, ImageRole::kIcon, "thumb-icon"));
-        result.icon_source = info_proto::PreviewSource::PREVIEW_SOURCE_RAW;
+        result.icon_source = info_proto::PreviewSource::kRaw;
     }
     return result;
 }
@@ -1158,7 +1164,7 @@ absl::StatusOr<ImportResult> BuildProjection(container::LegacyModel& model,
             projected,
             ProjectReplacement(
                 *projectile, "projectile-" + std::to_string(ordinal++),
-                asset_proto::RenderTargetKind::RENDER_TARGET_KIND_PROJECTILE,
+                asset_proto::RenderTargetKind::kProjectile,
                 model.info.properties, next_model_blob++, images,
                 position_indices, uv_indices));
         targets.emplace_back(std::move(projected));
@@ -1170,7 +1176,7 @@ absl::StatusOr<ImportResult> BuildProjection(container::LegacyModel& model,
             projected,
             ProjectReplacement(
                 *vehicle, "vehicle-" + std::to_string(ordinal++),
-                asset_proto::RenderTargetKind::RENDER_TARGET_KIND_VEHICLE,
+                asset_proto::RenderTargetKind::kVehicle,
                 model.info.properties, next_model_blob++, images,
                 position_indices, uv_indices));
         targets.emplace_back(std::move(projected));
@@ -1185,21 +1191,6 @@ absl::StatusOr<ImportResult> BuildProjection(container::LegacyModel& model,
     YSM_ASSIGN_OR_RETURN(manifest.info, ProjectInfo(model, images));
     YSM_DECLARE_OR_RETURN(
         sounds, SortedStringEntries(model.common.sounds, "sound streams"));
-    manifest.common_assets.sounds.reserve(sounds.size());
-    std::uint32_t stream_id = 1;
-    for (auto* sound : sounds) {
-        const auto& source = sound->second.value;
-        common_proto::Sound projected{};
-        projected.name = sound->first;
-        projected.encoding =
-            source.encoding == container::SoundEncoding::kVorbis ? "OGG_VORBIS"
-                                                                 : "OGG_OPUS";
-        projected.channels = source.channels;
-        projected.sample_rate = source.sample_rate;
-        projected.samples = source.samples;
-        projected.stream_id = stream_id++;
-        manifest.common_assets.sounds.emplace_back(std::move(projected));
-    }
 
     std::vector<Payload> payloads;
     payloads.reserve(payload_count);
@@ -1244,15 +1235,19 @@ absl::StatusOr<ImportResult> BuildProjection(container::LegacyModel& model,
     for (auto& payload : named_images) {
         payloads.emplace_back(std::move(payload));
     }
-    stream_id = 1;
+    std::uint32_t sound_id = 1;
     for (auto* sound : sounds) {
+        auto& source = sound->second.value;
         const auto encoding =
-            sound->second.value.encoding == container::SoundEncoding::kVorbis
+            source.encoding == container::SoundEncoding::kVorbis
                 ? PayloadEncoding::kOggVorbis
                 : PayloadEncoding::kOggOpus;
         payloads.push_back(Payload{PayloadKind::kSoundStream, encoding,
-                                   stream_id++, sound->first, std::nullopt,
-                                   std::move(sound->second.value.bytes)});
+                                   sound_id++, sound->first, std::nullopt,
+                                   std::move(source.bytes),
+                                   SoundMetadata{source.channels,
+                                                 source.sample_rate,
+                                                 source.samples}});
     }
     return ImportResult{{model.version, source_size, model.model_id},
                         std::move(payloads)};

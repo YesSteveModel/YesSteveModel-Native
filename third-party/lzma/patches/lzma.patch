@@ -12,7 +12,7 @@ index 3a8e2cb..785bdbb 100644
  /* use SZ_ALLOC_DEBUG to debug alloc/free operations */
  
 diff --git a/C/Alloc.c b/C/Alloc.c
-index 5525150..f7fe900 100644
+index 9fc0e06..13945d5 100644
 --- a/C/Alloc.c
 +++ b/C/Alloc.c
 @@ -10,6 +10,8 @@
@@ -37,4 +37,3 @@ index 0000000..75ef3c9
 +add_library(lzma STATIC ${lzmaCodeFiles})
 +target_include_directories(lzma INTERFACE C)
 \ No newline at end of file
-

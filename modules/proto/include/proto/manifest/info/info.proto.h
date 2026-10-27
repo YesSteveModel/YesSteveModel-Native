@@ -10,9 +10,9 @@
 namespace ysm::proto::manifest::info {
 
 enum class PreviewSource {
-    PREVIEW_SOURCE_UNSPECIFIED = 0,
-    PREVIEW_SOURCE_RAW = 1,
-    PREVIEW_SOURCE_GENERATED = 2,
+    kUnspecified = 0,
+    kRaw = 1,
+    kGenerated = 2,
 };
 
 struct Info : public iguana::base_impl<Info>  {

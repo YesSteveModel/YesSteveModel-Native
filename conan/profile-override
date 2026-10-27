@@ -4,6 +4,6 @@
 compiler.cppstd=23
 
 [conf]
-user.ysm:rev=2026.06.28.2
+user.ysm:rev=2026.10.27.2
 tools.cmake.cmaketoolchain:generator=Ninja
 tools.cmake.cmaketoolchain:user_toolchain+=["{{ repo }}/conan/cmake/pre-setup.cmake"]

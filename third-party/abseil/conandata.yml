@@ -1,13 +1,16 @@
 sources:
-  '20260107.1':
+  '20260817.0':
     url: https://github.com/abseil/abseil-cpp
-    tag: '20260107.1'
+    tag: '20260817.0'
 patches:
-  '20260107.1':
-  - patch_file: patches/20260107.1-0001-fix-heterogeneous_lookup-flag.patch
-  - patch_file: patches/20260107.1-0002-skip-librt-on-android.patch
-requirements: []
+  '20260817.0':
+  - patch_file: patches/20260817.0-0001-android-identity.patch
+  - patch_file: patches/20260817.0-0002-sysinfo-mimalloc.patch
+requirements:
+  - mimalloc/3.6.0@ysm/stable
 build:
+  global_link_targets:
+    - mimalloc-static
   options:
     ABSL_ENABLE_INSTALL: true
     ABSL_PROPAGATE_CXX_STD: true

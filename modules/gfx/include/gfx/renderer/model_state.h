@@ -60,6 +60,15 @@ class ModelState {
         std::span<const BoneAttribute> bone_attributes,
         size_t locator_capacity);
 
+    template <typename SimdTag>
+    absl::StatusOr<ExtractOutput> ExtractSubtree(
+        SimdTag tag,
+        const std::shared_ptr<bake::BakedModel>& baked_model,
+        std::span<const BoneAttribute> bone_attributes,
+        size_t locator_capacity, size_t root_index);
+
+    void Invalidate() noexcept { valid_ = false; }
+
     [[nodiscard]] std::span<const uint16_t> StagedLocatorBoneIndices(
         size_t count) const {
         return std::span(locator_bone_indices_scratch_).first(count);
@@ -82,6 +91,9 @@ class ModelState {
     }
 
    private:
+    template <typename SimdTag>
+    struct Extraction;
+
     std::shared_ptr<bake::BakedModel> baked_model_;
     std::vector<BonePose> bone_poses_;
     std::vector<uint16_t> render_bone_indices_;

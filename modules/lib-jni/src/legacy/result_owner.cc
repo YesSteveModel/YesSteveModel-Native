@@ -12,7 +12,7 @@
 namespace ysm::legacy::java {
 namespace {
 constexpr std::size_t kHeaderSize = 60;
-constexpr std::size_t kPayloadPrefixSize = 36;
+constexpr std::size_t kPayloadPrefixSize = 40;
 constexpr std::size_t kMaxDescriptorSize = 16 * 1024 * 1024;
 constexpr std::size_t kMaxPayloadCount = 32'766;
 constexpr std::uint64_t kMaxSourceSize = 69'206'016;
@@ -95,21 +95,21 @@ absl::Status ValidatePayload(const Payload& payload) {
         case PayloadKind::kManifest:
             YSM_ASSERT(payload.encoding == PayloadEncoding::kDirect &&
                            payload.logical_id == 0 && payload.name.empty() &&
-                           !payload.image,
+                           !payload.image && !payload.sound,
                        absl::InvalidArgumentError(
                            "Invalid Manifest payload metadata"));
             return absl::OkStatus();
         case PayloadKind::kStringData:
             YSM_ASSERT(payload.encoding == PayloadEncoding::kDirect &&
                            payload.logical_id != 0 && payload.name.empty() &&
-                           !payload.image,
+                           !payload.image && !payload.sound,
                        absl::InvalidArgumentError(
                            "Invalid StringData payload metadata"));
             return absl::OkStatus();
         case PayloadKind::kModelData:
             YSM_ASSERT(payload.encoding == PayloadEncoding::kDirect &&
                            payload.logical_id != 0 && !payload.name.empty() &&
-                           !payload.image,
+                           !payload.image && !payload.sound,
                        absl::InvalidArgumentError(
                            "Invalid ModelData payload metadata"));
             return absl::OkStatus();
@@ -120,7 +120,7 @@ absl::Status ValidatePayload(const Payload& payload) {
                     payload.image->width != 0 && payload.image->height != 0 &&
                     payload.image->width <= kMaxImageDimension &&
                     payload.image->height <= kMaxImageDimension &&
-                    payload.image->frame_count == 1,
+                    payload.image->frame_count == 1 && !payload.sound,
                 absl::InvalidArgumentError("Invalid image payload metadata"));
             if (payload.kind == PayloadKind::kBlobImage) {
                 YSM_ASSERT(
@@ -137,7 +137,11 @@ absl::Status ValidatePayload(const Payload& payload) {
         case PayloadKind::kSoundStream:
             YSM_ASSERT(
                 IsSoundEncoding(payload.encoding) && payload.logical_id != 0 &&
-                    !payload.name.empty() && !payload.image,
+                    !payload.name.empty() && !payload.image && payload.sound &&
+                    (payload.sound->channels == 1 ||
+                     payload.sound->channels == 2) &&
+                    payload.sound->sample_rate != 0 &&
+                    payload.sound->frames != 0,
                 absl::InvalidArgumentError("Invalid sound stream metadata"));
             return absl::OkStatus();
     }
@@ -153,7 +157,7 @@ absl::Status ValidateCanonicalOrder(const std::vector<Payload>& payloads) {
                    "Payloads do not begin with Manifest and StringData"));
     int phase = 0;
     std::uint32_t next_blob_id = 1;
-    std::uint32_t next_stream_id = 1;
+    std::uint32_t next_sound_id = 1;
     std::unordered_set<std::string> model_names;
     std::string_view previous_sound_name;
     bool saw_sound = false;
@@ -199,7 +203,7 @@ absl::Status ValidateCanonicalOrder(const std::vector<Payload>& payloads) {
             case PayloadKind::kSoundStream:
                 phase = 3;
                 YSM_ASSERT(
-                    payload.logical_id == next_stream_id++ &&
+                    payload.logical_id == next_sound_id++ &&
                         (!saw_sound ||
                          UnsignedUtf8Less(previous_sound_name, payload.name)),
                     absl::InvalidArgumentError(
@@ -271,11 +275,19 @@ absl::StatusOr<BufferManaged> EncodeDescriptor(const ImportResult& result) {
         StoreLittleEndian(output, offset,
                           static_cast<std::uint32_t>(payload.name.size()));
         StoreLittleEndian(output, offset,
-                          payload.image ? payload.image->width : 0);
+                          payload.image ? payload.image->width
+                                        : payload.sound
+                                              ? payload.sound->channels
+                                              : 0);
         StoreLittleEndian(output, offset,
-                          payload.image ? payload.image->height : 0);
-        StoreLittleEndian(output, offset,
-                          payload.image ? payload.image->frame_count : 0);
+                          payload.image ? payload.image->height
+                                        : payload.sound
+                                              ? payload.sound->sample_rate
+                                              : 0);
+        StoreLittleEndian<std::uint64_t>(
+            output, offset,
+            payload.image ? payload.image->frame_count
+                          : payload.sound ? payload.sound->frames : 0);
         StoreLittleEndian(output, offset,
                           static_cast<std::uint64_t>(payload.bytes.size()));
         Copy(StrBuf(payload.name), Slice(output, offset, payload.name.size()));

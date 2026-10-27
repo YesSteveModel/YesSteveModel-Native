@@ -7,7 +7,7 @@ patches:
   1.5.7:
   - patch_file: patches/zstd-mimalloc.patch
 requirements:
-- mimalloc/3.5.3@ysm/stable
+- mimalloc/3.6.0@ysm/stable
 build:
   global_link_targets:
   - mimalloc-static

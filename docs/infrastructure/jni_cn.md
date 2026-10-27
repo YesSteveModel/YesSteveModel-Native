@@ -37,7 +37,7 @@ JNI 边界依赖 `ysm-java`。
 
 `BufferOutput<kSafe>::Create()` 创建固定长度输出，填满有效范围后用 `release()` 取得 Java 对象。`TryMoveToOutput(env, std::move(buffer), type)` 接管 native buffer：array 输出复制 bytes，direct 输出成功后移交 allocation；`CopyToOutput` 保留输入所有权。只有配套 `NativeHeapBuffer` owner/cleaner 的 API 才能接收 owning direct 输出。
 
-`release()` 和输出 helper 的 JNI 对象创建可能返回 `nullptr`，`StatusOr<jobject>::ok()` 不能替代非空检查；pending Java exception 仍由 JVM 传播。Java 包装应在 native 返回后检查结果并立即接管 owning 输出。
+`release()` 和输出 helper 的 JNI 对象创建可能返回 `nullptr`，`StatusOr<jobject>::ok()` 不能替代非空检查；pending Java exception 仍由 JVM 传播。`TryMoveToOutput` 的 direct 分支在非空且没有 pending exception 后才移交 allocation，失败时仍由 RAII 释放。Java 用 `NativeHeapBuffer.adopt` 检查并立即接管 owning 输出，wrapper 分配和 Cleaner 注册失败也释放同一 allocation。
 
 下面是配套的复制入口示例；安全输入模式允许在复制期间使用一般 native 能力，且在创建 Java 输出前结束输入作用域。
 
@@ -114,3 +114,5 @@ YSM_JNI_ENTRY(
 - `V` / `Z` 实现返回 `absl::Status`；其他返回类型使用 `absl::StatusOr<JNI type>`。
 - status 或异常由 entry 转为日志和 fallback，不会自动抛出 Java exception。
 - entry 由 registrar 收集，并在 `BindEntry` 阶段统一注册。
+
+设备分类同样通过 `NativeRuntime` 与 `YSM_JNI_ENTRY` 进入，不在配置类建立 native 旁路。其 `jlong` 输入为最大堆 byte 值，失败 fallback 由 Java 门面解释；Java 缓存一次结果。编码与默认责任唯一见[设备配置默认](../../../YesSteveModel/docs/architecture/implementation/native-runtime/overview.md#设备配置默认)。

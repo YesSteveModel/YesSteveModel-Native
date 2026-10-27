@@ -4,18 +4,21 @@
 
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 
+#include <java/opaque_ptr.h>
 #include <java/ref.h>
+#include <scope_guard.h>
 
 #include "result_owner.h"
 
 namespace ysm::legacy::java {
 namespace {
 constexpr const char* kResultClass =
-    "com/elfmcys/ysm/natives/legacy/NativeLegacyImportResult";
+    "com/elfmcys/ysm/natives/legacy/NativeLegacyImportResult$Output";
 constexpr const char* kResultConstructor =
     "(ILjava/lang/String;J[B[Ljava/nio/ByteBuffer;)V";
 
@@ -264,32 +267,33 @@ absl::StatusOr<jobject> NewFailureResult(JNIEnv_* env,
 
 absl::StatusOr<jobject> NewSuccessResult(JNIEnv_* env,
                                          v3::ImportResult import_result) {
-    auto owner = ResultOwner::Create(std::move(import_result));
-    if (!owner.ok()) {
-        return owner.status();
+    auto created = ResultOwner::Create(std::move(import_result));
+    if (!created.ok()) {
+        return created.status();
     }
+    std::shared_ptr<ResultOwner> owner(std::move(*created));
     auto constructor = FindResultConstructor(env);
     if (!constructor.ok()) {
         return constructor.status();
     }
-    auto descriptor = NewByteArray(env, (*owner)->descriptor());
+    auto descriptor = NewByteArray(env, owner->descriptor());
     if (!descriptor.ok()) {
         return descriptor.status();
     }
-    auto payloads = NewPayloadArray(env, *constructor, owner->get());
+    auto payloads = NewPayloadArray(env, *constructor, owner.get());
     if (!payloads.ok()) {
         return payloads.status();
     }
 
-    static_assert(sizeof(std::intptr_t) <= sizeof(jlong));
-    const auto handle =
-        static_cast<jlong>(reinterpret_cast<std::intptr_t>(owner->get()));
+    const auto handle = ::ysm::java::ShareOpaquePtr(owner);
+    auto rollback =
+        ScopeGuard([handle] { ::ysm::java::DestroyOpaquePtr(handle); });
     auto transport_result = NewResult(env, *constructor, 0, "", handle,
                                       descriptor->get(), payloads->get());
     if (!transport_result.ok()) {
         return transport_result.status();
     }
-    owner->release();
+    rollback.Release();
     return transport_result;
 }
 }  // namespace ysm::legacy::java

@@ -33,7 +33,7 @@ void LogDecodeResult(size_t size, bool recovered) {
 }
 ```
 
-`YSM_PLOG` / `YSM_PLOG_IF` 在同样形状的日志后附加 `errno` 信息。`LoggingScope(std::string)` 拥有名称；`string_view` / `const char*` 变体借用名称。作用域严格按 LIFO 析构，违反顺序会终止进程。
+`YSM_PLOG` / `YSM_PLOG_IF` 在同样形状的日志后附加 `errno` 信息。`LoggingScope` 根据构造参数推导模板类型：`std::string` 实例拥有名称；`string_view` / `char*` / `const char*` 实例借用名称，仅保存 view 和深度，不含 `std::string` 成员。作用域严格按 LIFO 析构，违反顺序会终止进程。
 
 Debug/Trace 是否编入由 `YSM_ENABLE_DEBUG_LOG` 决定，未显式设置时按 `YSM_DEBUG` 默认；运行时 `ConfigureLogLevel` 只能控制已编入且未被 Abseil verbosity 上限裁掉的日志。项目构建选项会配置这些编译开关。关闭的 Debug/Trace 宏仍要求参数表达式可编译，但不会求值；不要将业务副作用放在日志参数中。
 

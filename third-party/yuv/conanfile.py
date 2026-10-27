@@ -8,7 +8,7 @@ class YuvConan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     exports_sources = "patches/*", "src/*"
     name = "yuv"
-    version = "0.0.1892"
+    version = "0.0.1974"
     license = ""
     package_type = "static-library"
 

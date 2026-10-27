@@ -1,10 +1,9 @@
 sources:
-  4.0.2:
+  4.1.0:
     url: https://github.com/ngcpp/proxy
-    tag: 4.0.2
-    commit: bcbe0c792cd42cb48edfbbdb1e272255cbe73cae
+    tag: 4.1.0
 patches:
-  4.0.2: []
+  4.1.0: []
 requirements: []
 build:
   options: {}

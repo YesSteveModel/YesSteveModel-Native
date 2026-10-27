@@ -11,6 +11,7 @@
 
 namespace ysm::gfx::renderer {
 enum class RenderContext : uint16_t { kLevel, kIrisShadow, kGui };
+enum class RenderResult : int32_t { kStateInvalid = 0, kSuccess = 1, kOutputRejected = 2 };
 
 struct alignas(64) RenderParameters {
     mat4 model;
@@ -27,5 +28,12 @@ struct alignas(64) RenderParameters {
 
 absl::Status Render(BufferView vertex_buffer, VertexKind vertex_kind,
                     const ModelState& model_state,
-                    const RenderParameters& parameters);
+                    const RenderParameters& parameters, RenderResult& result);
+
+inline absl::Status Render(BufferView vertex_buffer, VertexKind vertex_kind,
+                          const ModelState& model_state,
+                          const RenderParameters& parameters) {
+    RenderResult result;
+    return Render(vertex_buffer, vertex_kind, model_state, parameters, result);
+}
 }  // namespace ysm::gfx::renderer

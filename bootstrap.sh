@@ -321,7 +321,7 @@ run_conan_with_profile() {
             -c:h "user.target:profile=$profile" \
             --core-conf core.graph:compatibility_mode=optimized
     else
-        run_conan profile detect -e
+        run_conan profile detect -e || return $?
         run_conan "$conan_command" "$root" \
             -pr:h default \
             -pr:h "$profile_override" \
@@ -335,7 +335,7 @@ run_conan_with_profile() {
 }
 
 install_with_profile() {
-    run_conan_with_profile install "$1"
+    run_conan_with_profile install "$1" || return $?
     run_conan cache clean --build
 }
 

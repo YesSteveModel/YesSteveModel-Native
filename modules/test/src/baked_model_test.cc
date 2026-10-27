@@ -1,5 +1,6 @@
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <string>
 #include <utility>
@@ -8,11 +9,14 @@
 #include <gtest/gtest.h>
 #include <ylt/struct_pb.hpp>
 
-#include "bake/fbs/baked_model_generated.h"
 #include "cpu.h"
 #include "gfx/bake/baked_model.h"
 #include "gfx/bake/baked_serializer.h"
+#include "gfx/renderer/model_state.h"
+#include "gfx/renderer/render.h"
+#include "renderer/vertex/vanilla.h"
 #include "proto/asset/model/data/geo_model.proto.h"
+#include "scope_guard.h"
 
 namespace ysm::test {
 namespace {
@@ -95,8 +99,11 @@ TEST(BakedModelTest, BakeRoundTrip) {
 
     auto restored = gfx::bake::ReadBakedModel(baked);
     ASSERT_TRUE(restored.ok()) << restored.status();
-    const auto& info = (*restored)->Info();
-    const auto& bones = (*restored)->Bones();
+    auto reserialized = gfx::bake::SerializeBakedModel(**restored);
+    ASSERT_EQ(baked.size(), reserialized.size());
+    EXPECT_EQ(std::memcmp(baked.data(), reserialized.data(), baked.size()), 0);
+    const auto& info = (*baked_model)->Info();
+    const auto& bones = (*baked_model)->Bones();
     ASSERT_EQ(bones.list.size(), 2);
     EXPECT_EQ(bones.sorted_bone_indices, (std::vector<uint16_t>{1, 0}));
     EXPECT_FALSE(bones.list[0].solid);
@@ -112,7 +119,7 @@ TEST(BakedModelTest, BakeRoundTrip) {
     EXPECT_FALSE(info.gui_no_shadow);
     EXPECT_TRUE(info.has_pbr);
 
-    const auto& cubes = (*restored)->Cubes<simd::Width::B128>();
+    const auto& cubes = (*baked_model)->Cubes<simd::Width::B128>();
     ASSERT_EQ(cubes.cutout_no_culling.size(), 1);
     EXPECT_EQ(cubes.cutout_no_culling[0].cube_count, 2);
     EXPECT_EQ(cubes.cutout_no_culling[0].bone_index, 1);
@@ -142,6 +149,9 @@ TEST(BakedModelTest, BakeRoundTrip) {
     BufferManaged corrupted(baked);
     corrupted.data()[0] ^= 0xff;
     EXPECT_FALSE(gfx::bake::ReadBakedModel(corrupted).ok());
+    EXPECT_FALSE(gfx::bake::ReadBakedModel(
+                     BufferViewR(baked.data(), baked.size() - 1))
+                     .ok());
 }
 
 TEST(BakedModelTest, LegacyFlags) {
@@ -291,6 +301,110 @@ TEST(BakedModelTest, GeneratesStablePreorderForUnsortedForest) {
               bones.sorted_bone_indices);
 }
 
+TEST(BakedModelTest, PreservesEmptyNamedChildGeometry) {
+    InitCpuInfo();
+#ifdef YSM_X64
+    simd::Mock(simd::Type::SSE41);
+#endif
+    proto::asset::model::data::GeoModel model;
+    model.from_pb(SerializeSingleCube(MakeQuad(1.0f)));
+    model.bones[0].name.clear();
+    model.bones[0].parent = "root";
+    model.bones[0].pivot = {16, 0, 0};
+    model.bones.resize(2);
+    model.bones[1].name = "root";
+    model.bones[1].pivot = {0, 16, 0};
+    model.bones[1].rotate = {0, 0, 0};
+    std::string protobuf;
+    struct_pb::to_pb(model, protobuf);
+    const std::array<gfx::bake::Pixel, 1> pixels{
+        gfx::bake::Pixel{255, 255, 255, 255},
+    };
+    gfx::bake::Texture texture(pixels.data(), 1, 1);
+    ASSERT_TRUE(gfx::bake::TryBakeModel(StrBuf(protobuf), texture, {}).ok());
+    auto baked = gfx::bake::BakeModel(StrBuf(protobuf), texture, {});
+    ASSERT_TRUE(baked.ok()) << baked.status();
+    auto restored = gfx::bake::ReadBakedModel(gfx::bake::SerializeBakedModel(**baked));
+    ASSERT_TRUE(restored.ok()) << restored.status();
+
+    const auto& bones = (*restored)->Bones();
+    EXPECT_EQ(bones.sorted_bone_indices, (std::vector<uint16_t>{1, 0}));
+    ASSERT_EQ(bones.list.size(), 2);
+    EXPECT_EQ(bones.list[0].parent_index, UINT32_MAX);
+    EXPECT_EQ(bones.list[0].subtree_end, 2);
+    EXPECT_EQ(bones.list[1].parent_index, 0);
+    EXPECT_EQ(bones.list[1].depth, 1);
+    EXPECT_EQ(bones.list[1].pivot, (std::array<float, 3>{16, 0, 0}));
+    EXPECT_TRUE(bones.list[1].HasGeometry());
+    EXPECT_EQ(bones.list[1].cutout_no_culling.cube_count, 1);
+    const auto& groups =
+        (*restored)->Cubes<simd::Width::B128>().cutout_no_culling;
+    ASSERT_EQ(groups.size(), 1);
+    EXPECT_EQ(groups[0].bone_index, 1);
+    EXPECT_EQ(groups[0].cube_count, 1);
+}
+
+TEST(BakedModelTest, EmptyParentRemainsRootWithEmptyNamedBone) {
+    InitCpuInfo();
+    const std::array<gfx::bake::Pixel, 1> pixels{
+        gfx::bake::Pixel{255, 255, 255, 255},
+    };
+    gfx::bake::Texture texture(pixels.data(), 1, 1);
+    for (const bool explicit_empty_parent : {false, true}) {
+        SCOPED_TRACE(explicit_empty_parent);
+        proto::asset::model::data::GeoModel model;
+        model.from_pb(SerializeSingleCube(MakeQuad(1.0f)));
+        model.bones[0].name.clear();
+        model.bones.resize(2);
+        model.bones[1].name = "other";
+        model.bones[1].pivot = {0, 0, 0};
+        model.bones[1].rotate = {0, 0, 0};
+        if (explicit_empty_parent) {
+            model.bones[0].parent = "";
+            model.bones[1].parent = "";
+        }
+        std::string protobuf;
+        struct_pb::to_pb(model, protobuf);
+        ASSERT_TRUE(gfx::bake::TryBakeModel(StrBuf(protobuf), texture, {}).ok());
+        auto baked = gfx::bake::BakeModel(StrBuf(protobuf), texture, {});
+        ASSERT_TRUE(baked.ok()) << baked.status();
+        const auto& bones = (*baked)->Bones();
+        EXPECT_EQ(bones.sorted_bone_indices, (std::vector<uint16_t>{0, 1}));
+        ASSERT_EQ(bones.list.size(), 2);
+        for (size_t i = 0; i < bones.list.size(); ++i) {
+            EXPECT_EQ(bones.list[i].parent_index, UINT32_MAX);
+            EXPECT_EQ(bones.list[i].depth, 0);
+            EXPECT_EQ(bones.list[i].subtree_end, i + 1);
+        }
+        EXPECT_TRUE(bones.list[0].HasGeometry());
+    }
+}
+
+TEST(BakedModelTest, RejectsDuplicateBoneNamesIncludingEmpty) {
+    InitCpuInfo();
+    const std::array<gfx::bake::Pixel, 1> pixels{
+        gfx::bake::Pixel{255, 255, 255, 255},
+    };
+    gfx::bake::Texture texture(pixels.data(), 1, 1);
+    for (const auto& name : std::array<std::string, 2>{"root", ""}) {
+        SCOPED_TRACE(name);
+        proto::asset::model::data::GeoModel model;
+        model.bones.resize(2);
+        for (auto& bone : model.bones) {
+            bone.name = name;
+            bone.parent = "";
+            bone.pivot = {0, 0, 0};
+            bone.rotate = {0, 0, 0};
+        }
+        std::string protobuf;
+        struct_pb::to_pb(model, protobuf);
+        EXPECT_EQ(gfx::bake::BakeModel(StrBuf(protobuf), texture, {}).status().code(),
+                  absl::StatusCode::kInvalidArgument);
+        EXPECT_EQ(gfx::bake::TryBakeModel(StrBuf(protobuf), texture, {}).code(),
+                  absl::StatusCode::kInvalidArgument);
+    }
+}
+
 TEST(BakedModelTest, RejectsInvalidHierarchyMetadata) {
     InitCpuInfo();
 #ifdef YSM_X64
@@ -326,10 +440,6 @@ TEST(BakedModelTest, RejectsInvalidHierarchyMetadata) {
     expect_invalid(model);
 
     model = make_model();
-    model.bones[1].name = "root";
-    expect_invalid(model);
-
-    model = make_model();
     model.bones[1].parent = "missing";
     expect_invalid(model);
 
@@ -339,10 +449,6 @@ TEST(BakedModelTest, RejectsInvalidHierarchyMetadata) {
 
     model = make_model();
     model.bones[0].parent = "child";
-    expect_invalid(model);
-
-    model = make_model();
-    model.bones[0].name.clear();
     expect_invalid(model);
 
     proto::asset::model::data::GeoModel too_many;
@@ -440,7 +546,7 @@ TEST(BakedModelTest, PreservesTrustedModelNormal) {
     EXPECT_FLOAT_EQ(groups[0].normal[2][0], 0.0f);
 }
 
-TEST(BakedModelTest, NonPbrCacheOmitsTangentData) {
+TEST(BakedModelTest, NonPbrCacheRestoresZeroTangents) {
     InitCpuInfo();
 #ifdef YSM_X64
     simd::Mock(simd::Type::SSE41);
@@ -454,17 +560,13 @@ TEST(BakedModelTest, NonPbrCacheOmitsTangentData) {
     auto baked =
         gfx::bake::BakeModel(StrBuf(model_data), texture, {.has_pbr = false});
     ASSERT_TRUE(baked.ok()) << baked.status();
+    const auto& direct = (*baked)->Cubes<simd::Width::B128>().cutout_no_culling[0];
+    for (const auto& axis : direct.tangent) {
+        for (const auto value : axis) {
+            EXPECT_FLOAT_EQ(value, 0.0f);
+        }
+    }
     auto serialized = gfx::bake::SerializeBakedModel(**baked);
-
-    const auto* flat_model = gfx::bake::fb::GetBakedModel(serialized.data());
-    ASSERT_NE(flat_model, nullptr);
-    EXPECT_FALSE(flat_model->has_pbr());
-    ASSERT_NE(flat_model->cubes(), nullptr);
-    ASSERT_NE(flat_model->cubes()->cutout_no_culling(), nullptr);
-    ASSERT_EQ(flat_model->cubes()->cutout_no_culling()->size(), 1);
-    const auto* flat_group = flat_model->cubes()->cutout_no_culling()->Get(0);
-    ASSERT_NE(flat_group, nullptr);
-    EXPECT_EQ(flat_group->tangent(), nullptr);
 
     auto restored = gfx::bake::ReadBakedModel(serialized);
     ASSERT_TRUE(restored.ok()) << restored.status();
@@ -474,6 +576,121 @@ TEST(BakedModelTest, NonPbrCacheOmitsTangentData) {
     EXPECT_FLOAT_EQ(group.tangent[0][0], 0.0f);
     EXPECT_FLOAT_EQ(group.tangent[3][0], 0.0f);
 }
+
+TEST(BakedModelTest, RejectsMismatchedSerializedVectorWidth) {
+    InitCpuInfo();
+#ifdef YSM_X64
+    simd::Mock(simd::Type::SSE41);
+#endif
+    gfx::bake::BakedModel model(
+        {}, {}, gfx::bake::BakedModelCubes<simd::Width::B256>{});
+    EXPECT_FALSE(gfx::bake::ReadBakedModel(
+                     gfx::bake::SerializeBakedModel(model))
+                     .ok());
+}
+
+class DirectBakedModelTest : public testing::TestWithParam<simd::Type> {};
+
+TEST_P(DirectBakedModelTest, KnownQuadPartitionsAndSurfaceData) {
+    InitCpuInfo();
+#ifdef YSM_X64
+    if ((GetParam() == simd::Type::AVX2 && !kX86Features.avx2) ||
+        (GetParam() == simd::Type::AVX512 &&
+         !(kX86Features.avx512f && kX86Features.avx512vl && kX86Features.avx512bw))) {
+        GTEST_SKIP() << "SIMD is unavailable on this host";
+    }
+#endif
+    const auto previous = simd::kSupported;
+    simd::Mock(GetParam());
+    const auto restore = ScopeGuard([&] { simd::Mock(previous); });
+    for (const bool pbr : {false, true}) {
+        for (int partition = 0; partition < 4; ++partition) {
+            const bool translucent = partition >= 2;
+            const bool full_cube = partition == 0 || partition == 3;
+            const auto bytes = SerializeSingleCube(
+                full_cube ? MakeSixFaceCube(1.0f) : MakeQuad(1.0f));
+            const std::array pixels{gfx::bake::Pixel{
+                255, 255, 255, static_cast<uint8_t>(translucent ? 128 : 255)}};
+            auto baked = gfx::bake::BakeModel(
+                StrBuf(bytes), gfx::bake::Texture(pixels.data(), 1, 1),
+                {.origin_ver = 29, .force_culling = partition == 3, .has_pbr = pbr});
+            ASSERT_TRUE(baked.ok()) << baked.status();
+            EXPECT_EQ((*baked)->Bones().sorted_bone_indices, (std::vector<uint16_t>{0}));
+            const auto& bone = (*baked)->Bones().list[0];
+            const std::array parts{&bone.cutout, &bone.cutout_no_culling,
+                                   &bone.translucent, &bone.translucent_culling};
+            for (size_t index = 0; index < parts.size(); ++index) {
+                EXPECT_EQ(parts[index]->cube_count, index == partition ? 1 : 0);
+            }
+            EXPECT_EQ(parts[partition]->full_vertex_count, full_cube ? 24 : 4);
+            (*baked)->VisitCubes([&](const auto& cubes) {
+                const auto verify = [&](const auto& groups) {
+                    ASSERT_EQ(groups.size(), 1);
+                    const auto& group = groups[0];
+                    EXPECT_FLOAT_EQ(group.pos[0][1], 1.0f);
+                    EXPECT_FLOAT_EQ(group.normal[2][0], 1.0f);
+                    EXPECT_FLOAT_EQ(group.cube_attr[0].quad_attr[0].uv[2][0], 1.0f);
+                    EXPECT_FLOAT_EQ(group.tangent[0][0], pbr ? 1.0f : 0.0f);
+                    EXPECT_FLOAT_EQ(group.tangent[3][0], pbr ? -1.0f : 0.0f);
+                };
+                switch (partition) {
+                    case 0: verify(cubes.cutout); break;
+                    case 1: verify(cubes.cutout_no_culling); break;
+                    case 2: verify(cubes.translucent); break;
+                    case 3: verify(cubes.translucent_culling); break;
+                }
+            });
+            auto serialized = gfx::bake::SerializeBakedModel(**baked);
+            auto restored = gfx::bake::ReadBakedModel(serialized);
+            ASSERT_TRUE(restored.ok()) << restored.status();
+            auto round_trip = gfx::bake::SerializeBakedModel(**restored);
+            ASSERT_EQ(serialized.size(), round_trip.size());
+            EXPECT_EQ(std::memcmp(serialized.data(), round_trip.data(), serialized.size()), 0);
+            const std::shared_ptr<gfx::bake::BakedModel> direct(std::move(*baked));
+            const std::shared_ptr<gfx::bake::BakedModel> reference(std::move(*restored));
+            std::array<gfx::renderer::BoneAttribute, 1> attributes{};
+            std::ranges::fill(attributes[0].scale, 1.0f);
+            gfx::renderer::ModelState direct_state;
+            gfx::renderer::ModelState reference_state;
+            auto extracted = direct_state.Extract(
+                simd::GenericTag{}, direct, attributes, attributes.size());
+            auto reference_extract = reference_state.Extract(
+                simd::GenericTag{}, reference, attributes, attributes.size());
+            ASSERT_TRUE(extracted.ok()) << extracted.status();
+            ASSERT_TRUE(reference_extract.ok()) << reference_extract.status();
+            EXPECT_EQ(extracted->vertex_count, reference_extract->vertex_count);
+            gfx::renderer::RenderParameters parameters{};
+            glm_mat4_identity(parameters.model);
+            glm_mat4_identity(parameters.view);
+            glm_mat4_identity(parameters.projection);
+            glm_mat3_identity(parameters.normal);
+            parameters.ctx = gfx::renderer::RenderContext::kLevel;
+            parameters.light = 0x1234abcd;
+            parameters.color.packed = 0xffffffff;
+            std::vector<Byte> output(extracted->vertex_count *
+                gfx::renderer::vertex::VanillaVertex::kSize);
+            std::vector<Byte> reference_output(output.size());
+            ASSERT_TRUE(gfx::renderer::Render(output, gfx::renderer::VertexKind::kVanilla,
+                direct_state, parameters).ok());
+            ASSERT_TRUE(gfx::renderer::Render(reference_output, gfx::renderer::VertexKind::kVanilla,
+                reference_state, parameters).ok());
+            EXPECT_EQ(output, reference_output);
+            if (partition == 1) {
+                EXPECT_EQ(extracted->vertex_count, 4);
+                const auto* vertices = reinterpret_cast<const
+                    gfx::renderer::vertex::VanillaVertex*>(output.data());
+                EXPECT_EQ(vertices[0].light, parameters.light);
+            }
+        }
+    }
+}
+
+#ifdef YSM_X64
+INSTANTIATE_TEST_SUITE_P(SupportedSimd, DirectBakedModelTest,
+    testing::Values(simd::Type::SSE41, simd::Type::AVX2, simd::Type::AVX512));
+#elif defined(YSM_ARM64)
+INSTANTIATE_TEST_SUITE_P(SupportedSimd, DirectBakedModelTest, testing::Values(simd::Type::NEON));
+#endif
 
 }  // namespace
 }  // namespace ysm::test

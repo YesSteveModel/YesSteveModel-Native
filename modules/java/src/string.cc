@@ -22,9 +22,10 @@ Ref<jstring> U8ToStr(JNIEnv_* env, CStringView str) {
 }
 
 std::string StrToU8(JNIEnv_* env, jstring str) {
-    auto len = env->GetStringUTFLength(str);
-    std::string result_str(len, '\0');
-    env->GetStringUTFRegion(str, 0, len, result_str.data());
+    auto byte_len = env->GetStringUTFLength(str);
+    std::string result_str(byte_len, '\0');
+    // The region length counts UTF-16 code units, not output bytes.
+    env->GetStringUTFRegion(str, 0, env->GetStringLength(str), result_str.data());
     return result_str;
 }
 

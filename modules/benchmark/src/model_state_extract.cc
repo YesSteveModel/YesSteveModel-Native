@@ -7,16 +7,21 @@
 #include <cstdio>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include <benchmark/benchmark.h>
+#include <ylt/struct_pb.hpp>
 
 #include "gfx/bake/baked_model.h"
+#include "gfx/bake/baked_serializer.h"
 #include "cpu.h"
 #include "inline.h"
 #include "gfx/renderer/model_state.h"
+#include "proto/asset/model/data/geo_model.proto.h"
+#include "scope_guard.h"
 
 namespace ysm::benchmarking {
 namespace {
@@ -169,6 +174,38 @@ std::shared_ptr<gfx::bake::BakedModel> MakeModel(size_t bone_count) {
                                                std::move(cubes));
 }
 
+std::shared_ptr<gfx::bake::BakedModel> MakeCacheModel(size_t group_count,
+                                                  bool has_pbr) {
+    proto::asset::model::data::CubeLegacy cube;
+    cube.faceCount = 1;
+    cube.pos = {0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0};
+    cube.pos_indices = {0, 1, 2, 3};
+    cube.uv = {0, 0, 1, 0, 1, 1, 0, 1};
+    cube.uv_indices = {0, 1, 2, 3};
+    cube.normal = {0, 0, 1};
+
+    proto::asset::model::data::GeoModel source;
+    source.bones.resize(1);
+    source.bones[0].name = "root";
+    source.bones[0].pivot = {0, 0, 0};
+    source.bones[0].rotate = {0, 0, 0};
+    source.bones[0].cubeCount = static_cast<uint32_t>(group_count * 2);
+    source.cubes.cubes_legacy.assign(group_count * 2, cube);
+    std::string protobuf;
+    struct_pb::to_pb(source, protobuf);
+
+    const std::array<gfx::bake::Pixel, 1> pixels{
+        gfx::bake::Pixel{255, 255, 255, 255},
+    };
+    const gfx::bake::Texture texture(pixels.data(), 1, 1);
+    auto model = gfx::bake::BakeModel(StrBuf(protobuf), texture,
+                                     {.has_pbr = has_pbr});
+    if (!model.ok()) {
+        throw std::runtime_error(model.status().ToString());
+    }
+    return std::shared_ptr<gfx::bake::BakedModel>(std::move(*model));
+}
+
 float UnitValue(size_t value) noexcept {
     return static_cast<float>(value % 257) / 256.0f;
 }
@@ -288,6 +325,46 @@ void SteadyStateExtract(benchmark::State& benchmark_state,
                                       bone_count);
 }
 
+void SerializeBakedModel(benchmark::State& benchmark_state,
+                         size_t group_count, simd::Type type, bool has_pbr) {
+    const auto previous_type = simd::kSupported;
+    const auto restore = ScopeGuard([&] { simd::Mock(previous_type); });
+    simd::Mock(type);
+    const auto model = MakeCacheModel(group_count, has_pbr);
+    for (auto _ : benchmark_state) {
+        auto serialized = gfx::bake::SerializeBakedModel(*model);
+        benchmark::DoNotOptimize(serialized.data());
+        benchmark::ClobberMemory();
+    }
+    const auto serialized = gfx::bake::SerializeBakedModel(*model);
+    benchmark_state.SetBytesProcessed(benchmark_state.iterations() *
+                                      serialized.size());
+    benchmark_state.counters["payload_bytes"] =
+        static_cast<double>(serialized.size());
+}
+
+void DeserializeBakedModel(benchmark::State& benchmark_state,
+                           size_t group_count, simd::Type type, bool has_pbr) {
+    const auto previous_type = simd::kSupported;
+    const auto restore = ScopeGuard([&] { simd::Mock(previous_type); });
+    simd::Mock(type);
+    const auto model = MakeCacheModel(group_count, has_pbr);
+    const auto serialized = gfx::bake::SerializeBakedModel(*model);
+    for (auto _ : benchmark_state) {
+        auto restored = gfx::bake::ReadBakedModel(serialized);
+        if (!restored.ok()) {
+            const std::string error = restored.status().ToString();
+            benchmark_state.SkipWithError(error.c_str());
+            return;
+        }
+        benchmark::DoNotOptimize(restored->get());
+    }
+    benchmark_state.SetBytesProcessed(benchmark_state.iterations() *
+                                      serialized.size());
+    benchmark_state.counters["payload_bytes"] =
+        static_cast<double>(serialized.size());
+}
+
 }  // namespace
 
 bool ValidateModelStateExtractBenchmarks() {
@@ -360,6 +437,38 @@ void RegisterModelStateExtractBenchmarks() {
                                          variant.extract, bone_count)
                 ->UseRealTime()
                 ->Unit(benchmark::kNanosecond);
+        }
+    }
+    std::vector<simd::Type> cache_types{simd::kSupported};
+#ifdef YSM_X64
+    if (simd::kSupported != simd::Type::kNone) {
+        cache_types = {simd::Type::SSE41};
+    }
+    if (simd::kSupported == simd::Type::AVX2 ||
+        simd::kSupported == simd::Type::AVX512) {
+        cache_types.push_back(simd::Type::AVX2);
+    }
+    if (simd::kSupported == simd::Type::AVX512) {
+        cache_types.push_back(simd::Type::AVX512);
+    }
+#endif
+    constexpr size_t kSerializationGroupCount = 96;
+    for (const auto type : cache_types) {
+        for (const bool has_pbr : {false, true}) {
+            const auto suffix = std::string(magic_enum::enum_name(type)) +
+                                (has_pbr ? "/Pbr" : "/NonPbr");
+            const auto serialize_name = "BakedModelCache/Serialize/" + suffix;
+            const auto deserialize_name =
+                "BakedModelCache/Deserialize/" + suffix;
+            benchmark::RegisterBenchmark(serialize_name, SerializeBakedModel,
+                                         kSerializationGroupCount, type, has_pbr)
+                ->UseRealTime()
+                ->Unit(benchmark::kMicrosecond);
+            benchmark::RegisterBenchmark(deserialize_name,
+                                         DeserializeBakedModel,
+                                         kSerializationGroupCount, type, has_pbr)
+                ->UseRealTime()
+                ->Unit(benchmark::kMicrosecond);
         }
     }
 }

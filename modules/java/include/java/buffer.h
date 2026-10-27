@@ -246,6 +246,9 @@ class BufferOutput : public BufferBase<BufferOutput<kSafe>>, NonCopyable {
 
 static absl::StatusOr<jobject> TryMoveToOutput(JNIEnv_* env, BufferManaged buf, BufferType type) noexcept {
     YSM_ASSERT(env != nullptr, absl::InvalidArgumentError("Null"sv));
+    if (env->ExceptionCheck()) {
+        return nullptr;
+    }
     if (type == BufferType::kByteArray) {
         auto array = env->NewByteArray(buf.size());
         if (array == nullptr) {
@@ -256,9 +259,13 @@ static absl::StatusOr<jobject> TryMoveToOutput(JNIEnv_* env, BufferManaged buf, 
         return array;
     } else {
         auto output = env->NewDirectByteBuffer(buf.data(), buf.size());
-        if (output != nullptr) {
-            [[maybe_unused]] auto transferred = buf.release();
+        if (output == nullptr || env->ExceptionCheck()) {
+            if (output != nullptr) {
+                env->DeleteLocalRef(output);
+            }
+            return nullptr;
         }
+        [[maybe_unused]] auto transferred = buf.release();
         return output;
     }
 }

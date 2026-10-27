@@ -15,10 +15,12 @@ namespace {
 Payload MakePayload(PayloadKind kind, PayloadEncoding encoding,
                     std::uint32_t logical_id, std::string name,
                     std::string_view bytes = {},
-                    std::optional<ImageMetadata> image = std::nullopt) {
+                    std::optional<ImageMetadata> image = std::nullopt,
+                    std::optional<v3::SoundMetadata> sound = std::nullopt) {
     return Payload{kind,       encoding,
                    logical_id, std::move(name),
-                   image,      BufferManaged(StrBuf(bytes))};
+                   image,      BufferManaged(StrBuf(bytes)),
+                   sound};
 }
 
 ImportResult MinimalResult() {
@@ -58,7 +60,7 @@ TEST(LegacyResultProtocolTest, EncodesExactUnversionedDescriptor) {
 
     const auto descriptor = EncodeDescriptor(result);
     ASSERT_TRUE(descriptor.ok()) << descriptor.status();
-    ASSERT_EQ(descriptor->size(), 60 + 36 * 3 + 6);
+    ASSERT_EQ(descriptor->size(), 60 + 40 * 3 + 6);
     EXPECT_EQ(
         std::string_view(reinterpret_cast<const char*>(descriptor->data()), 8),
         std::string_view("YSMLEGI\0", 8));
@@ -88,10 +90,12 @@ TEST(LegacyResultProtocolTest, EnforcesCanonicalSoundOrderAndIds) {
     auto result = MinimalResult();
     result.payloads.emplace_back(MakePayload(PayloadKind::kSoundStream,
                                              PayloadEncoding::kOggVorbis, 1,
-                                             "a.ogg", "ogg"));
+                                             "a.ogg", "ogg", std::nullopt,
+                                             v3::SoundMetadata{2, 44'100, 960}));
     result.payloads.emplace_back(MakePayload(PayloadKind::kSoundStream,
                                              PayloadEncoding::kOggOpus, 2,
-                                             "z.ogg", "ogg"));
+                                             "z.ogg", "ogg", std::nullopt,
+                                             v3::SoundMetadata{2, 48'000, 960}));
     EXPECT_TRUE(EncodeDescriptor(result).ok());
 
     result.payloads.back().logical_id = 3;

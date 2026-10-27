@@ -1,11 +1,9 @@
 sources:
-  '1.17.0':
+  '1.18.0':
     url: https://github.com/google/googletest
-    tag: v1.17.0
-    commit: 52eb8108c5bdec04579160ae17225d66034bd723
+    tag: v1.18.0
 patches:
-  '1.17.0':
-  - patch_file: patches/1.17.0-0001-fix-clang22-char8-conversion.patch
+  '1.18.0': []
 build:
   options:
     BUILD_SHARED_LIBS: false

@@ -16,4 +16,5 @@
 | [JNI 基建](infrastructure/jni_cn.md) | 引用、数组、buffer、handle 与 entry 注册 | `java` | `Ref<T>`、`BufferInput`、`YSM_JNI_ENTRY` |
 | [Codec 基建](infrastructure/codec_cn.md) | 哈希、编码、压缩、图片与归档 | `codec` | `Blake3Hash`、`ZstdDecompress`、`ImageProbe` |
 | [Opus 流解码](infrastructure/opus_cn.md) | 分片输入、PCM 输出与结束协议 | `codec` | `OpusAudioStream` |
+| [音频规范化](infrastructure/audio-normalization_cn.md) | 严格 inspect、R/T 候选、时间轴与失败分类 | `codec` / `java` | `NormalizeAudio`、`AudioNormalizer` |
 | [GFX 高级能力](infrastructure/gfx_cn.md) | 烘焙、baked cache、姿态、调度与渲染 | `gfx` | `BakeModel`、`ModelState::Extract`、`Render` |

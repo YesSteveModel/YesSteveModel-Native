@@ -19,9 +19,10 @@ target_link_libraries(ysm-test PRIVATE
         ysm-java
         ysm-legacy
         ysm-legacy-jni
+        yalantinglibs
         GTest::gtest
-        cryptopp
-        flatbuffers)
+        opus
+        cryptopp)
 
 include(GoogleTest)
 if(CMAKE_CROSSCOMPILING)

@@ -263,12 +263,14 @@ if defined TOOLCHAIN_PATH (
     call :run_conan %~2 "%ROOT%" -pr:h "%TOOLCHAIN_PATH%\conan\%~1" -pr:h "%PROFILE_OVERRIDE%" -pr:b "%TOOLCHAIN_PATH%\conan\%BUILD_ENV_PROFILE%" --no-remote --build=missing -s build_type=%BUILD_TYPE% -c:h "user.target:profile=%~1" --core-conf core.graph:compatibility_mode=optimized
 ) else (
     call :run_conan profile detect -e
+    if errorlevel 1 exit /b 1
     call :run_conan %~2 "%ROOT%" -pr:h default -pr:h "%PROFILE_OVERRIDE%" -s:h compiler.runtime=static -pr:b default --no-remote --build=missing -s build_type=%BUILD_TYPE% -c:h "user.target:profile=%NATIVE_PROFILE%" --core-conf core.graph:compatibility_mode=optimized
 )
 exit /b %ERRORLEVEL%
 
 :install
 call :run_conan_with_profile "%~1" install
+if errorlevel 1 exit /b %ERRORLEVEL%
 call :run_conan cache clean --build
 exit /b %ERRORLEVEL%
 

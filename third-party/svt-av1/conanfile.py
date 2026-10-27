@@ -8,7 +8,7 @@ class SvtAv1Conan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     exports_sources = "patches/*", "src/*"
     name = "svt-av1"
-    version = "4.1.0"
+    version = "4.2.0"
     license = ""
     package_type = "static-library"
 

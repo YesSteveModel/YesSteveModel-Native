@@ -15,7 +15,7 @@ YSM_FAST_MATH_BEGIN
 namespace ysm::gfx::renderer {
 template <bool kCulling, bool kHasPbr>
 YSM_SIMD_TARGET
-void PerformRender(YSM_SIMD_TAG tag, const auto& vertex_consumer, const auto& model,
+RenderResult PerformRender(YSM_SIMD_TAG tag, const auto& vertex_consumer, const auto& model,
                    const RenderState& render_state,
                    const RenderTask::Partition& task,
                    const RenderParameters& params,
@@ -27,7 +27,7 @@ void PerformRender(YSM_SIMD_TAG tag, const auto& vertex_consumer, const auto& mo
     static constexpr bool kIris = VertexBufferType::kIris;
 
     if (task.expected_vertex_count == 0) [[unlikely]] {
-        return;
+        return RenderResult::kSuccess;
     }
 
     auto vertex_writer = vertex_consumer.CreateVertexWriter(
@@ -39,12 +39,12 @@ void PerformRender(YSM_SIMD_TAG tag, const auto& vertex_consumer, const auto& mo
         auto& cube_group = model[cube_group_index];
         auto bone_index = cube_group.bone_index;
         if (!waiter.Wait(bone_index)) [[unlikely]] {
-            return;
+            return RenderResult::kStateInvalid;
         }
 
         auto& bone_state = render_state.GetBoneState(bone_index);
-        if (!bone_state.ok) [[unlikely]] {
-            return;
+        if (bone_state.result != RenderResult::kSuccess) [[unlikely]] {
+            return bone_state.result;
         }
 
         const auto light = bone_state.packed_light;
@@ -131,6 +131,7 @@ void PerformRender(YSM_SIMD_TAG tag, const auto& vertex_consumer, const auto& mo
             }  // quad
         }  // cube
     }  // cube group
+    return RenderResult::kSuccess;
 }
 }
 YSM_FAST_MATH_END

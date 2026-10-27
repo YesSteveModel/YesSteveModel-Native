@@ -1,54 +1,48 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 974be80..262af67 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -4,7 +4,9 @@
- 
+@@ -5,6 +5,8 @@
  cmake_minimum_required( VERSION 3.16 )
  project ( YUV C CXX )	# "C" is required even for C++ projects
  option( UNIT_TEST "Built unit tests" OFF )
 +option( LIBYUV_BUILD_SHARED_LIBRARY "Build shared libyuv library" ON )
 +option( LIBYUV_BUILD_TOOLS "Build libyuv tools" ON )
+ option( LIBYUV_DISABLE_JPEG "Disable JPEG support" OFF )
  
  include(CheckCSourceCompiles)
- 
-@@ -173,31 +175,35 @@ endif()
- add_library( ${ly_lib_static} STATIC ${ly_lib_parts})
+@@ -233,6 +235,7 @@ add_library( ${ly_lib_static} STATIC ${ly_lib_parts})
  target_include_directories( ${ly_lib_static} INTERFACE ${ly_inc_dir})
  
-+if(LIBYUV_BUILD_SHARED_LIBRARY)
  # this creates the shared library (.so)
++if(LIBYUV_BUILD_SHARED_LIBRARY)
  add_library( ${ly_lib_shared} SHARED ${ly_lib_parts})
  target_include_directories( ${ly_lib_shared} INTERFACE ${ly_inc_dir})
  target_compile_definitions( ${ly_lib_shared} INTERFACE LIBYUV_USING_SHARED_LIBRARY=1)
- set_target_properties( ${ly_lib_shared} PROPERTIES OUTPUT_NAME "${ly_lib_name}" )
- set_target_properties( ${ly_lib_shared} PROPERTIES PREFIX "lib" )
- if(WIN32)
+@@ -242,6 +245,9 @@ if(WIN32)
    set_target_properties( ${ly_lib_shared} PROPERTIES IMPORT_PREFIX "lib" )
  endif()
-+endif()
  
++endif()
++
 +if(LIBYUV_BUILD_TOOLS)
  # this creates the cpuid tool
  add_executable      ( cpuid ${ly_base_dir}/util/cpuid.c )
  target_link_libraries  ( cpuid ${ly_lib_static} )
- 
- # this creates the conversion tool
- add_executable			( yuvconvert ${ly_base_dir}/util/yuvconvert.cc )
- target_link_libraries	( yuvconvert ${ly_lib_static} )
- 
- # this creates the yuvconstants tool
- add_executable      ( yuvconstants ${ly_base_dir}/util/yuvconstants.c )
- target_link_libraries  ( yuvconstants ${ly_lib_static} )
-+endif()
- 
- find_package ( JPEG )
--if (JPEG_FOUND)
-+if (JPEG_FOUND AND TARGET ${ly_lib_shared})
-   include_directories( ${JPEG_INCLUDE_DIR} )
-   target_link_libraries( ${ly_lib_shared} ${JPEG_LIBRARY} )
-   add_definitions( -DHAVE_JPEG )
+@@ -257,9 +263,11 @@ if(NOT MSVC)
+   target_link_libraries  ( yuvconstants m )
  endif()
-@@ -245,8 +251,12 @@ endif()
+ 
++endif()
++
+ if (NOT LIBYUV_DISABLE_JPEG)
+   find_package ( JPEG )
+-  if (JPEG_FOUND)
++  if (JPEG_FOUND AND TARGET ${ly_lib_shared})
+     include_directories( ${JPEG_INCLUDE_DIR} )
+     target_link_libraries( ${ly_lib_shared} ${JPEG_LIBRARY} )
+     add_definitions( -DHAVE_JPEG )
+@@ -312,9 +320,13 @@ endif()
  
  
  # install the conversion tool, .so, .a, and all the header files
@@ -61,3 +55,4 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
 +endif()
  install ( DIRECTORY ${PROJECT_SOURCE_DIR}/include/		DESTINATION include )
  
+ # create the .deb and .rpm packages using cpack

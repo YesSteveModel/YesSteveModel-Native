@@ -1,10 +1,9 @@
 sources:
-  1.9.5:
+  "1.10.0":
     url: https://github.com/google/benchmark
-    tag: v1.9.5
-    commit: 192ef10025eb2c4cdd392bc502f0c852196baa48
+    tag: v1.10.0
 patches:
-  1.9.5: []
+  "1.10.0": []
 requirements: []
 build:
   options:

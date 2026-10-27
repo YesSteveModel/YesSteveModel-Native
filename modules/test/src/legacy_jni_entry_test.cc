@@ -28,8 +28,8 @@ TEST(LegacyJniEntryTest, StaticModuleContributesExactMainRegistryEntries) {
     EXPECT_TRUE(
         has_entry(kClassName, "nImport",
                   "(Ljava/lang/Object;J)Lcom/elfmcys/ysm/natives/legacy/"
-                  "NativeLegacyImportResult;"));
-    EXPECT_TRUE(has_entry(kClassName, "nRelease", "(J)V"));
+                  "NativeLegacyImportResult$Output;"));
+    EXPECT_TRUE(has_entry(kClassName, "nShare", "(J)J"));
 }
 }  // namespace
 }  // namespace ysm::legacy

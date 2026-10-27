@@ -8,7 +8,7 @@ class Dav1dConan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     exports_sources = "patches/*", "src/*"
     name = "dav1d"
-    version = "1.5.3"
+    version = "1.5.4"
     license = ""
     package_type = "static-library"
 

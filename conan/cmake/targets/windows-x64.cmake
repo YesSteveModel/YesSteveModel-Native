@@ -2,8 +2,8 @@ set(CMAKE_POLICY_DEFAULT_CMP0091 NEW)
 set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded$<$<CONFIG:Debug>:Debug>)
 
 add_compile_definitions(
-    WINVER=0x0A00
-    _WIN32_WINNT=0x0A00
+    WINVER=0x0601
+    _WIN32_WINNT=0x0601
     _AMD64_
     _SILENCE_CXX20_U8PATH_DEPRECATION_WARNING
     _CRT_SECURE_NO_WARNINGS
@@ -20,7 +20,7 @@ add_c_compile_options(
 )
 
 if(NOT ysm_in_try_compile)
-    add_c_compile_options(LLVM -march=x86-64-v2)
+    add_c_compile_options(LLVM -march=x86-64)
 endif()
 
 add_cxx_compile_options(/EHsc)

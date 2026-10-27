@@ -1,0 +1,23 @@
+sources:
+  1.3.7:
+    url: https://github.com/xiph/vorbis
+    tag: v1.3.7
+patches:
+  1.3.7:
+  - patch_file: patches/vorbis.patch
+requirements:
+- ogg/1.3.6@ysm/stable
+- mimalloc/3.6.0@ysm/stable
+build:
+  global_link_targets:
+  - mimalloc-static
+  options:
+    BUILD_SHARED_LIBS: false
+    BUILD_FRAMEWORK: false
+    INSTALL_CMAKE_PACKAGE_MODULE: true
+  install: true
+package:
+  cmake_file_name: Vorbis
+  cmake_target_name: Vorbis::vorbis
+  includedirs:
+  - include

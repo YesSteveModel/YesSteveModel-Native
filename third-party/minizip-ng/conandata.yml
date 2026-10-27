@@ -1,15 +1,14 @@
 sources:
-  4.2.1:
+  "4.2.2":
     url: https://github.com/zlib-ng/minizip-ng
-    tag: 4.2.1
-    commit: 26b4619120f714cb76c0c52cdd48223bee944d73
+    tag: 4.2.2
 patches:
-  4.2.1:
+  "4.2.2":
   - patch_file: patches/minizip-ng.patch
   - patch_file: patches/minizip-ng-mimalloc.patch
 requirements:
 - zlib-ng/2.3.3@ysm/stable
-- mimalloc/3.5.3@ysm/stable
+- mimalloc/3.6.0@ysm/stable
 build:
   global_link_targets:
   - mimalloc-static

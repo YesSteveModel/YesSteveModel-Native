@@ -1,0 +1,94 @@
+diff --git a/src/struct_pb/tools/struct_code_generator.hpp b/src/struct_pb/tools/struct_code_generator.hpp
+index cd76b76..3fabdc8 100644
+--- a/src/struct_pb/tools/struct_code_generator.hpp
++++ b/src/struct_pb/tools/struct_code_generator.hpp
+@@ -266,6 +266,72 @@ std::string code_generate_ylt_macro(const std::string &struct_name,
+   return result;
+ }
+ 
++std::string enum_value_prefix(const std::string &enum_name) {
++  std::string prefix;
++  prefix.reserve(enum_name.size() + 1);
++  for (size_t i = 0; i < enum_name.size(); ++i) {
++    const char current = enum_name[i];
++    const bool current_upper = current >= 'A' && current <= 'Z';
++    const bool previous_lower_or_digit =
++        i > 0 && ((enum_name[i - 1] >= 'a' && enum_name[i - 1] <= 'z') ||
++                  (enum_name[i - 1] >= '0' && enum_name[i - 1] <= '9'));
++    const bool next_lower = i + 1 < enum_name.size() &&
++                            enum_name[i + 1] >= 'a' &&
++                            enum_name[i + 1] <= 'z';
++    if (i > 0 && current_upper &&
++        (previous_lower_or_digit ||
++         (enum_name[i - 1] >= 'A' && enum_name[i - 1] <= 'Z' &&
++          next_lower))) {
++      prefix.push_back('_');
++    }
++    prefix.push_back(current >= 'a' && current <= 'z'
++                         ? static_cast<char>(current - 'a' + 'A')
++                         : current);
++  }
++  prefix.push_back('_');
++  return prefix;
++}
++
++bool can_strip_enum_value_prefix(const struct_enum &enum_inst,
++                                 const std::string &prefix) {
++  if (enum_inst.fields_.empty()) {
++    return false;
++  }
++  for (const auto &field : enum_inst.fields_) {
++    if (field.first.size() <= prefix.size() ||
++        field.first.compare(0, prefix.size(), prefix) != 0) {
++      return false;
++    }
++  }
++  return true;
++}
++
++std::string google_enum_value_name(const std::string &name) {
++  std::string result = "k";
++  bool capitalize = true;
++  for (const char current : name) {
++    if (current == '_') {
++      capitalize = true;
++      continue;
++    }
++    if (current >= 'A' && current <= 'Z') {
++      result.push_back(capitalize
++                           ? current
++                           : static_cast<char>(current - 'A' + 'a'));
++    }
++    else if (current >= 'a' && current <= 'z') {
++      result.push_back(capitalize
++                           ? static_cast<char>(current - 'a' + 'A')
++                           : current);
++    }
++    else {
++      result.push_back(current);
++    }
++    capitalize = false;
++  }
++  return result;
++}
++
+ std::string code_generate_enum(const struct_enum &enum_inst) {
+   std::string result = "enum class ";
+   if (enum_inst.enum_name_.empty())
+@@ -276,9 +342,14 @@ std::string code_generate_enum(const struct_enum &enum_inst) {
+     result.append("}\n");
+   }
+   else {
+-    for (auto i : enum_inst.fields_) {
++    const std::string prefix = enum_value_prefix(enum_inst.enum_name_);
++    const bool strip_prefix =
++        can_strip_enum_value_prefix(enum_inst, prefix);
++    for (const auto &i : enum_inst.fields_) {
+       result.append("\t");
+-      result.append(i.first);
++      const std::string value_name =
++          strip_prefix ? i.first.substr(prefix.size()) : i.first;
++      result.append(google_enum_value_name(value_name));
+       result.append(" = ");
+       result.append(std::to_string(i.second));
+       result.append(",\n");

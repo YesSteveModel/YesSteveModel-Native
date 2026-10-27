@@ -1,6 +1,12 @@
 if(NOT ysm_in_try_compile)
-    add_c_compile_options(-march=x86-64-v2)
+    add_c_compile_options(-march=x86-64)
 endif()
+
+add_compile_definitions(
+    _GNU_SOURCE=1
+    _FILE_OFFSET_BITS=64
+    _TIME_BITS=64
+)
 
 add_c_compile_options(-pthread)
 add_custom_link_options(

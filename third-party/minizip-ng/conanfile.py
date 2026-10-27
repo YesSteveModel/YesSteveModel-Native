@@ -8,7 +8,7 @@ class MinizipNgConan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     exports_sources = "patches/*", "src/*"
     name = "minizip-ng"
-    version = "4.2.1"
+    version = "4.2.2"
     license = ""
     package_type = "static-library"
 

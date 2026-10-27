@@ -1,23 +1,23 @@
 diff --git a/src/jdatadst-tj.c b/src/jdatadst-tj.c
-index ecfaccb..55209c8 100644
+index f5fec11..84b6e2e 100644
 --- a/src/jdatadst-tj.c
 +++ b/src/jdatadst-tj.c
-@@ -23,6 +23,7 @@
- #include "jinclude.h"
- #include "jpeglib.h"
- #include "jerror.h"
+@@ -26,6 +26,7 @@
+ #if !defined(_MSC_VER) || _MSC_VER > 1600
+ #include <stdint.h>
+ #endif
 +#include <mimalloc-override.h>
  
  void jpeg_mem_dest_tj(j_compress_ptr cinfo, unsigned char **outbuffer,
                        size_t *outsize, boolean alloc);
 diff --git a/src/jdatadst.c b/src/jdatadst.c
-index 529f93b..51f3354 100644
+index 198e41b..99804ff 100644
 --- a/src/jdatadst.c
 +++ b/src/jdatadst.c
-@@ -22,6 +22,7 @@
- #include "jinclude.h"
- #include "jpeglib.h"
- #include "jerror.h"
+@@ -25,6 +25,7 @@
+ #if !defined(_MSC_VER) || _MSC_VER > 1600
+ #include <stdint.h>
+ #endif
 +#include <mimalloc-override.h>
  
  
@@ -67,21 +67,70 @@ index 2ec6f13..e1d8ed5 100644
  #endif
  
  
+diff --git a/src/rdpng.c b/src/rdpng.c
+index 08a0e63..3d988c1 100644
+--- a/src/rdpng.c
++++ b/src/rdpng.c
+@@ -20,6 +20,7 @@
+ #include "cmyk.h"
+ #include "cdjpeg.h"             /* Common decls for cjpeg/djpeg applications */
+ #include "spng/spng.h"
++#include <mimalloc.h>
+ 
+ #if defined(PNG_SUPPORTED) && \
+     (BITS_IN_JSAMPLE != 16 || defined(C_LOSSLESS_SUPPORTED))
+@@ -457,7 +458,7 @@ get_indexed_row(j_compress_ptr cinfo, cjpeg_source_ptr sinfo)
+ 
+ static void *spng_malloc(size_t size)
+ {
+-  return calloc(1, size);
++  return mi_calloc(1, size);
+ }
+ 
+ #endif
+@@ -478,9 +479,9 @@ start_input_png(j_compress_ptr cinfo, cjpeg_source_ptr sinfo)
+   struct spng_alloc alloc;
+ 
+   alloc.malloc_fn = spng_malloc;
+-  alloc.realloc_fn = realloc;
+-  alloc.calloc_fn = calloc;
+-  alloc.free_fn = free;
++  alloc.realloc_fn = mi_realloc;
++  alloc.calloc_fn = mi_calloc;
++  alloc.free_fn = mi_free;
+   source->ctx = spng_ctx_new2(&alloc, 0);
+ #else
+   source->ctx = spng_ctx_new(0);
 diff --git a/src/spng/spng.c b/src/spng/spng.c
-index ef9f130..daa7d5d 100644
+index 06249d6..e79615a 100644
 --- a/src/spng/spng.c
 +++ b/src/spng/spng.c
 @@ -26,6 +26,8 @@
      #include <pthread.h>
  #endif
  
-+#include <mimalloc-override.h>
++#include <mimalloc.h>
 +
  /* Not build options, edit at your own risk! */
  #define SPNG_READ_SIZE (8192)
  #define SPNG_WRITE_SIZE SPNG_READ_SIZE
+@@ -4886,10 +4888,10 @@ spng_ctx *spng_ctx_new(int flags)
+ {
+     struct spng_alloc alloc =
+     {
+-        .malloc_fn = malloc,
+-        .realloc_fn = realloc,
+-        .calloc_fn = calloc,
+-        .free_fn = free
++        .malloc_fn = mi_malloc,
++        .realloc_fn = mi_realloc,
++        .calloc_fn = mi_calloc,
++        .free_fn = mi_free
+     };
+ 
+     return spng_ctx_new2(&alloc, flags);
 diff --git a/src/turbojpeg.c b/src/turbojpeg.c
-index 7eb5983..c81d492 100644
+index a508561..bf40344 100644
 --- a/src/turbojpeg.c
 +++ b/src/turbojpeg.c
 @@ -46,6 +46,7 @@
@@ -93,7 +142,7 @@ index 7eb5983..c81d492 100644
  #undef tj3Init
  DLLEXPORT tjhandle tj3Init(int initType);
 diff --git a/src/wrpng.c b/src/wrpng.c
-index 3eacbf8..2793fab 100644
+index 93dc80b..7de4623 100644
 --- a/src/wrpng.c
 +++ b/src/wrpng.c
 @@ -20,6 +20,7 @@

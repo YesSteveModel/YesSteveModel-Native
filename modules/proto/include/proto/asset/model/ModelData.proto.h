@@ -9,9 +9,9 @@ namespace ysm::proto::asset::model {
 
 struct GeoModelsEntry : public iguana::base_impl<GeoModelsEntry>  {
 	GeoModelsEntry() = default;
-	GeoModelsEntry(std::string a, std::string b) : key(std::move(a)), value(std::move(b)) {}
+	GeoModelsEntry(std::string a, ::ysm::proto::asset::model::data::GeoModel b) : key(std::move(a)), value(std::move(b)) {}
 	std::string key;
-	std::string value;
+	::ysm::proto::asset::model::data::GeoModel value;
 };
 YLT_REFL(GeoModelsEntry, key, value);
 

@@ -6,7 +6,6 @@
 
 #include "cpu.h"
 #include "enum.h"
-#include "log.h"
 #include "profile.h"
 
 #include "gfx/renderer/model_state.h"
@@ -75,7 +74,8 @@ consteval std::string_view ProfileRenderContext() noexcept {
 
 absl::Status Render(BufferView vertex_buffer, VertexKind vertex_kind,
                     const ModelState& model_state,
-                    const RenderParameters& parameters) {
+                    const RenderParameters& parameters, RenderResult& result) {
+    result = RenderResult::kStateInvalid;
     YSM_ASSERT(model_state.IsValid(),
                absl::FailedPreconditionError("ModelState is invalid."));
     const auto& schedule = model_state.Schedule();
@@ -100,22 +100,25 @@ absl::Status Render(BufferView vertex_buffer, VertexKind vertex_kind,
         YSM_PROFILE_ZONE(ProfileRenderContext<kRenderContext>().data());
         YSM_PROFILE_VALUE(model_state.Schedule().vertex_count);
 
+        result = RenderResult::kOutputRejected;
+        YSM_ASSERT(vertex_buffer.size() >=
+            VertexBufferType::kVertexSize * schedule.vertex_count,
+            absl::InvalidArgumentError("Vertex buffer too small"));
         YSM_RETURN_IF_ERROR(state.UpdateCommon(tag, parameters, model_state));
+        result = RenderResult::kStateInvalid;
 
         [[maybe_unused]] auto active_scope = ParallelExecutor::NopScope();
         if (schedule_mode == RenderSchedulingMode::kSerialPrewake) {
             active_scope = executor.BeginActiveScope();
         }
         if (schedule_mode != RenderSchedulingMode::kWorkerReadySpin) {
-            YSM_RETURN_IF_ERROR(state.Update(tag, parameters, model_state, 0, 1));
+            result = state.Update(tag, parameters, model_state, 0, 1);
+            YSM_ASSERT(result == RenderResult::kSuccess,
+                       absl::InvalidArgumentError("Error updating render bone state"));
         }
         if (active_scope == nullptr && schedule_mode != RenderSchedulingMode::kInline) {
             active_scope = executor.BeginActiveScope();
         }
-
-        YSM_ASSERT(vertex_buffer.size() >=
-            VertexBufferType::kVertexSize * schedule.vertex_count,
-            absl::InvalidArgumentError("Vertex buffer too small"));
 
         const auto& cubes = baked_model.Cubes<kWidth>();
         VertexBufferType vertex_consumer(
@@ -125,19 +128,27 @@ absl::Status Render(BufferView vertex_buffer, VertexKind vertex_kind,
         TranslucentBufferType translucent_proxy(
             vertex_consumer, schedule.translucent_vertex_count,
             schedule.translucent_vertex_offset);
-        std::atomic_bool err = false;
+        std::atomic<RenderResult> generation_result = RenderResult::kSuccess;
+        auto record_result = [&](RenderResult current) {
+            if (current == RenderResult::kStateInvalid) [[unlikely]] {
+                generation_result.store(current, std::memory_order_relaxed);
+            } else if (current == RenderResult::kOutputRejected) [[unlikely]] {
+                auto expected = RenderResult::kSuccess;
+                generation_result.compare_exchange_strong(
+                    expected, current, std::memory_order_relaxed);
+            }
+        };
 
         auto task_func = [&](uint32_t worker_index, uint32_t worker_count) {
             std::conditional_t<kWorkerReadySpin, WorkerReadyWaiter, NopWaiter>
                 bone_waiter(schedule, state);
 
             if constexpr (kWorkerReadySpin) {
-                auto status = state.Update(tag, parameters, model_state, worker_index,
+                auto current = state.Update(tag, parameters, model_state, worker_index,
                                            worker_count);
                 state.PublishWorkerReady(worker_index);
-                if (!status.ok()) [[unlikely]] {
-                    YSM_LOG_DEBUG_EVERY_N_SEC(5, "Failed to setup render state: {}", status.message());
-                    err = true;
+                if (current != RenderResult::kSuccess) [[unlikely]] {
+                    record_result(current);
                     return;
                 }
             }
@@ -148,34 +159,34 @@ absl::Status Render(BufferView vertex_buffer, VertexKind vertex_kind,
                 !partition.cube_indices.empty()) {
                 YSM_PROFILE_ZONE("YSM/C++/Partition/Cutout");
                 YSM_PROFILE_VALUE(partition.expected_vertex_count);
-                PerformRender<true, kHasPbr>(
+                record_result(PerformRender<true, kHasPbr>(
                     tag, vertex_consumer, cubes.cutout, state, partition,
-                    parameters, bone_waiter);
+                    parameters, bone_waiter));
             }
             if (auto& partition = task.cutout_no_culling;
                 !partition.cube_indices.empty()) {
                 YSM_PROFILE_ZONE("YSM/C++/Partition/CutoutNoCulling");
                 YSM_PROFILE_VALUE(partition.expected_vertex_count);
-                PerformRender<false, kHasPbr>(
+                record_result(PerformRender<false, kHasPbr>(
                     tag, vertex_consumer, cubes.cutout_no_culling, state,
-                    partition, parameters, bone_waiter);
+                    partition, parameters, bone_waiter));
             }
             // translucent
             if (auto& partition = task.translucent;
                 !partition.cube_indices.empty()) {
                 YSM_PROFILE_ZONE("YSM/C++/Partition/Translucent");
                 YSM_PROFILE_VALUE(partition.expected_vertex_count);
-                PerformRender<false, kHasPbr>(
+                record_result(PerformRender<false, kHasPbr>(
                     tag, translucent_proxy, cubes.translucent, state,
-                    partition, parameters, bone_waiter);
+                    partition, parameters, bone_waiter));
             }
             if (auto& partition = task.translucent_culling;
                 !partition.cube_indices.empty()) {
                 YSM_PROFILE_ZONE("YSM/C++/Partition/TranslucentCulling");
                 YSM_PROFILE_VALUE(partition.expected_vertex_count);
-                PerformRender<true, kHasPbr>(
+                record_result(PerformRender<true, kHasPbr>(
                     tag, translucent_proxy, cubes.translucent_culling, state,
-                    partition, parameters, bone_waiter);
+                    partition, parameters, bone_waiter));
             }
         };
 
@@ -186,6 +197,10 @@ absl::Status Render(BufferView vertex_buffer, VertexKind vertex_kind,
             ysm_lfence;
         }
 
+        result = generation_result.load(std::memory_order_relaxed);
+        if (result != RenderResult::kSuccess) [[unlikely]] {
+            return absl::InternalError("Error updating render bone state");
+        }
         {
             YSM_PROFILE_ZONE("YSM/C++/Translucent.Flush");
             YSM_PROFILE_VALUE(schedule.translucent_vertex_count);
@@ -193,7 +208,8 @@ absl::Status Render(BufferView vertex_buffer, VertexKind vertex_kind,
                                     RenderContext::kIrisShadow);
         }
 
-        return err ? absl::InternalError("Error updating render bone state") : OkStatus();
+        result = RenderResult::kSuccess;
+        return OkStatus();
     }, vertex_kind, simd::kSupported, parameters.ctx, has_pbr,
        schedule_mode == RenderSchedulingMode::kWorkerReadySpin);
 }

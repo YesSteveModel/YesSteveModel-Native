@@ -1,78 +1,36 @@
 #pragma once
 
-/* SPDX-License-Identifier: 0BSD */
-/* License text available at end of this file */
-
+#include <cstddef>
 #include <cstdint>
-#include <optional_ref.hpp>
+#include <limits>
+
+#include <absl/status/statusor.h>
+
 #include "buffer.h"
 
 namespace ysm::codec {
-class MiniOgg {
-   public:
-    static constexpr size_t kMaxSegments = 255;
+inline constexpr std::size_t kOggPageHeaderSize = 27;
+inline constexpr std::size_t kOggMaxSegments = 255;
+inline constexpr std::size_t kOggMaxPageSize =
+    kOggPageHeaderSize + kOggMaxSegments + kOggMaxSegments * 255;
+inline constexpr std::uint64_t kOggUnknownGranule =
+    (std::numeric_limits<std::uint64_t>::max)();
 
-    enum class State : uint8_t { kHeader, kSegmentTable, kBody, kPageEof };
-
-#pragma pack(push, 1)
-
-    struct PageHeader {
-        BufferFixed<4> id;
-        uint8_t version;
-
-        bool continuation : 1;
-        bool bos : 1;
-        bool eos : 1;
-        uint8_t reserved : 5;
-
-        uint64_t granule_pos;
-        uint32_t serial_no;
-        uint32_t page_seq;
-        uint32_t crc32;
-        uint8_t segments;
-    };
-
-#pragma pack(pop)
-
-    enum class ProcessStatus : uint8_t { kNone, kPartial, kFull, kEagain };
-
-    struct ProcessResult {
-        BufferViewR packet;
-        uint16_t consumed = 0;
-        ProcessStatus status = ProcessStatus::kNone;
-    };
-
-    MiniOgg() noexcept;
-
-    void Reset() noexcept;
-
-    [[nodiscard]] gch::optional_cref<PageHeader> Page() const noexcept;
-
-    absl::StatusOr<ProcessResult> Process(BufferViewR data);
-
-   private:
-    PageHeader header_{};
-    BufferFixed<kMaxSegments> segments_{};
-
-    uint16_t packet_processed_ = 0;
-    uint8_t segment_index_ = 0;
-    State demux_state_ = State::kHeader;
+struct OggPageView {
+    BufferViewR bytes;
+    BufferViewR lacing;
+    BufferViewR body;
+    std::uint64_t granule_position{};
+    std::uint32_t serial_number{};
+    std::uint32_t sequence{};
+    bool continuation{};
+    bool bos{};
+    bool eos{};
 };
+
+[[nodiscard]] std::uint32_t OggCrc(BufferViewR page) noexcept;
+
+// Parses and validates exactly the first complete page. Trailing bytes remain
+// outside the returned page view and are consumed by the stream owner.
+[[nodiscard]] absl::StatusOr<OggPageView> ReadOggPage(BufferViewR input);
 }  // namespace ysm::codec
-
-/*
-BSD Zero Clause License
-
-Copyright (c) 2023 John Regan
-
-Permission to use, copy, modify, and/or distribute this software for any
-purpose with or without fee is hereby granted.
-
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
-REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
-AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
-INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
-LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
-OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
-PERFORMANCE OF THIS SOFTWARE.
-*/

@@ -7,6 +7,7 @@
 #include <err.h>
 #include <java/array.h>
 #include <java/entry.h>
+#include <java/opaque_ptr.h>
 #include <java/string.h>
 #include <legacy/bundle.h>
 #include <log.h>
@@ -93,16 +94,12 @@ struct Wrapper {
     absl::Status Ok() { return archive.Ok(); }
 };
 
-ArchiveProxy& Cast(jlong ptr) noexcept {
-    return *reinterpret_cast<ArchiveProxy*>(ptr);
-}
-
 template <typename ArchiveType>
 absl::StatusOr<jlong> Allocate(const fs::path& path) {
     auto ptr = std::make_unique<Wrapper<ArchiveType>>(path);
     auto status = ptr->Ok();
     if (status.ok()) {
-        return reinterpret_cast<jlong>(new ArchiveProxy(std::move(ptr)));
+        return java::MakeOpaquePtr<ArchiveProxy>(std::move(ptr));
     }
     YSM_LOG_DEBUG("Failed to open archive \"{}\": {}", PathToU8(path),
                   status.message());
@@ -137,27 +134,16 @@ YSM_JNI_ENTRY(
 }
 
 YSM_JNI_ENTRY(
-    "Lcom/elfmcys/ysm/natives/NativeArchive;nDestroy(J)V",
-    (ptr)) {
-    YSM_ASSERT(ptr != 0,
-               absl::InvalidArgumentError("archive pointer is null"sv));
-    delete &Cast(ptr);
-    return OkStatus();
-}
-
-YSM_JNI_ENTRY(
     "Lcom/elfmcys/ysm/natives/NativeArchive;nList(JLjava/lang/String;I)[Ljava/lang/String;",
     (ptr, path, type)) {
-    YSM_ASSERT(ptr != 0,
-               absl::InvalidArgumentError("archive pointer is null"sv));
-    return Cast(ptr)->List(env, path, type);
+    YSM_DECLARE_OR_RETURN(archive, java::CastOpaquePtr<ArchiveProxy>(ptr));
+    return (*archive)->List(env, path, type);
 }
 
 YSM_JNI_ENTRY(
     "Lcom/elfmcys/ysm/natives/NativeArchive;nGetFile(JLjava/lang/String;Z)Ljava/lang/Object;",
     (ptr, file_name, dry_run)) {
-    YSM_ASSERT(ptr != 0,
-               absl::InvalidArgumentError("archive pointer is null"sv));
-    return Cast(ptr)->GetFile(env, file_name, dry_run);
+    YSM_DECLARE_OR_RETURN(archive, java::CastOpaquePtr<ArchiveProxy>(ptr));
+    return (*archive)->GetFile(env, file_name, dry_run);
 }
 }  // namespace ysm::lib::archive

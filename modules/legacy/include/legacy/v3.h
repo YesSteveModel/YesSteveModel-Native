@@ -45,6 +45,12 @@ struct ImageMetadata {
     std::uint32_t frame_count{};
 };
 
+struct SoundMetadata {
+    std::uint32_t channels{};
+    std::uint32_t sample_rate{};
+    std::uint64_t frames{};
+};
+
 struct Payload {
     PayloadKind kind{};
     PayloadEncoding encoding{};
@@ -52,6 +58,7 @@ struct Payload {
     std::string name;
     std::optional<ImageMetadata> image;
     BufferManaged bytes;
+    std::optional<SoundMetadata> sound;
 };
 
 struct ImportResult {

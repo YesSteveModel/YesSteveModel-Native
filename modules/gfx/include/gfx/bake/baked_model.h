@@ -16,18 +16,22 @@
 #include "non_copyable.h"
 
 namespace ysm::gfx::bake {
+struct BakedModelSerdeAccess;
+
+struct CubeAttribute {
+    struct QuadAttr {
+        std::array<vec2, 4> uv{};
+        vec2 mid_uv{};
+    };
+
+    std::array<QuadAttr, 6> quad_attr{};
+    uint8_t quad_count = 0;
+    uint8_t quad_count_after_culling = 0;
+};
+
 template <simd::Width kVecWidthIn, bool kTranslucentIn>
 struct alignas(simd::bytes(kVecWidthIn)) CubeGroup {
-    struct CubeAttr {
-        struct QuadAttr {
-            std::array<vec2, 4> uv{};
-            vec2 mid_uv{};
-        };
-
-        std::array<QuadAttr, 6> quad_attr;
-        uint8_t quad_count = 0;
-        uint8_t quad_count_after_culling = 0;
-    };
+    using CubeAttr = CubeAttribute;
 
     static constexpr simd::Width kVecWidth = kVecWidthIn;
     static constexpr bool kTranslucent = kTranslucentIn;
@@ -143,6 +147,8 @@ struct BakedModelInfo {
 };
 
 class BakedModel {
+    friend struct BakedModelSerdeAccess;
+
     BakedModelInfo info_;
     BakedModelBones bones_;
     std::any cubes_ = nullptr;
@@ -169,6 +175,23 @@ class BakedModel {
 
     const BakedModelInfo& Info() const {
         return info_;
+    }
+
+    [[nodiscard]] size_t CapacityBytes() const {
+        const auto vector_bytes = [](const auto& values) {
+            return values.capacity() * sizeof(typename std::remove_cvref_t<
+                                              decltype(values)>::value_type);
+        };
+        return sizeof(*this) + vector_bytes(bones_.list) +
+               vector_bytes(bones_.sorted_bone_indices) +
+               vector_bytes(bones_.cube_indices_cache) +
+               vector_bytes(bones_.cube_group_info_cache) +
+               VisitCubes([&](const auto& cubes) {
+                   return sizeof(cubes) + vector_bytes(cubes.cutout) +
+                          vector_bytes(cubes.cutout_no_culling) +
+                          vector_bytes(cubes.translucent) +
+                          vector_bytes(cubes.translucent_culling);
+               });
     }
 
     template <simd::Width kVecWidth>

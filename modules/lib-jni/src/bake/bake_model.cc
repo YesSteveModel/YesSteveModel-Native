@@ -10,6 +10,7 @@
 #include <log.h>
 
 #include "java/opaque_ptr.h"
+#include "model_result.h"
 
 namespace ysm::lib::bake {
 namespace {
@@ -27,7 +28,7 @@ YSM_JNI_ENTRY(
 }
 
 YSM_JNI_ENTRY(
-    "Lcom/elfmcys/ysm/natives/render/NativeBakedModel;nBake(Ljava/lang/Object;J[SJIIJ)Ljava/nio/ByteBuffer;",
+    "Lcom/elfmcys/ysm/natives/render/NativeBakedModel;nBake(Ljava/lang/Object;J[SJIIJ)J",
     (model_data_buf, model_data_flags, sorted_bone_indices_array, pixels_ptr,
      pixels_width, pixels_height, bake_options)) {
     YSM_DECLARE_OR_RETURN(model_data,
@@ -48,18 +49,37 @@ YSM_JNI_ENTRY(
                               .force_culling = force_culling != 0,
                               .force_translucent = force_translucent != 0,
                               .has_pbr = has_pbr != 0}));
-    YSM_RETURN_IF_ERROR(java::WriteShortArray(
-        env, sorted_bone_indices_array,
-        baked_model->Bones().sorted_bone_indices));
-    auto baked_data = ysm::gfx::bake::SerializeBakedModel(*baked_model);
     YSM_LOG_DEBUG(
-        "Baked model: input={} bytes, texture={}x{}, bones={}, "
-        "output={} bytes",
+        "Baked model: input={} bytes, texture={}x{}, bones={}",
         model_data.size(), pixels_width, pixels_height,
-        baked_model->Bones().sorted_bone_indices.size(), baked_data.size());
+        baked_model->Bones().sorted_bone_indices.size());
 
-    return java::TryMoveToOutput(env, std::move(baked_data),
-                                 java::BufferType::kDirect);
+    return DeliverModel(env, std::move(baked_model), sorted_bone_indices_array);
+}
+
+YSM_JNI_ENTRY(
+    "Lcom/elfmcys/ysm/natives/render/NativeBakedModel;nStorageBytes(J)J",
+    (baked_model_ptr)) {
+    YSM_DECLARE_OR_RETURN(
+        model, java::CastOpaquePtr<ysm::gfx::bake::BakedModel>(baked_model_ptr));
+    return static_cast<jlong>(model->CapacityBytes());
+}
+
+YSM_JNI_ENTRY(
+    "Lcom/elfmcys/ysm/natives/render/NativeBakedModel;nSerializationBytes(J)J",
+    (baked_model_ptr)) {
+    YSM_DECLARE_OR_RETURN(
+        model, java::CastOpaquePtr<ysm::gfx::bake::BakedModel>(baked_model_ptr));
+    return static_cast<jlong>(ysm::gfx::bake::BakedModelSerializationBytes(*model));
+}
+
+YSM_JNI_ENTRY(
+    "Lcom/elfmcys/ysm/natives/render/NativeBakedModel;nSerialize(J)Ljava/nio/ByteBuffer;",
+    (baked_model_ptr)) {
+    YSM_DECLARE_OR_RETURN(
+        model, java::CastOpaquePtr<ysm::gfx::bake::BakedModel>(baked_model_ptr));
+    auto data = ysm::gfx::bake::SerializeBakedModel(*model);
+    return java::TryMoveToOutput(env, std::move(data), java::BufferType::kDirect);
 }
 
 YSM_JNI_ENTRY(
@@ -92,12 +112,9 @@ YSM_JNI_ENTRY(
         java::BufferInput<true, true>::Get(env, baked_model_buf_obj,
                                            baked_model_buf_flags));
     YSM_DECLARE_OR_RETURN(model, ysm::gfx::bake::ReadBakedModel(baked_model_buf));
-    YSM_RETURN_IF_ERROR(java::WriteShortArray(
-        env, sorted_bone_indices_array,
-        model->Bones().sorted_bone_indices));
     YSM_LOG_DEBUG("Read baked model: input={} bytes, bones={}",
                   baked_model_buf.size(),
                   model->Bones().sorted_bone_indices.size());
-    return java::MakeOpaquePtr<ysm::gfx::bake::BakedModel>(std::move(*model));
+    return DeliverModel(env, std::move(model), sorted_bone_indices_array);
 }
-}  // namespace ysm::lib::render
+}  // namespace ysm::lib::bake

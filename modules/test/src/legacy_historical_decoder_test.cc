@@ -4,10 +4,9 @@
 #include <array>
 #include <bit>
 #include <cmath>
-#include <cstdlib>
 #include <cstdint>
-#include <filesystem>
-#include <fstream>
+#include <future>
+#include <latch>
 #include <limits>
 #include <random>
 #include <span>
@@ -19,6 +18,9 @@
 #include <v3/container/image.h>
 #include <v3/conversion/projector.h>
 
+#include <codec/base64.h>
+
+#include "audio_test_fixture.h"
 #include "proto/asset/model/ModelData.proto.h"
 #include "proto/asset/model/data/animation.proto.h"
 #include "proto/asset/model/data/animation_controller.proto.h"
@@ -406,21 +408,36 @@ std::uint32_t OggCrc(std::span<const Byte> bytes) {
     return crc;
 }
 
-std::vector<Byte> MinimalOgg(std::span<const Byte> identification) {
-    constexpr std::array<Byte, 4> kOgg{'O', 'g', 'g', 'S'};
-    std::vector<Byte> result(28 + identification.size());
-    std::copy(kOgg.begin(), kOgg.end(), result.begin());
-    result[5] = 0x06;
-    result[6] = 0xC0;
-    result[7] = 0x03;
-    result[26] = 1;
-    result[27] = static_cast<Byte>(identification.size());
-    std::copy(identification.begin(), identification.end(),
-              result.begin() + 28);
-    const auto crc = OggCrc(result);
-    for (int index = 0; index < 4; ++index) {
-        result[22 + index] = static_cast<Byte>(crc >> (index * 8));
+void AppendOggPage(std::vector<Byte>& output, std::span<const Byte> packet,
+                   Byte flags, std::uint64_t granule, std::uint32_t sequence,
+                   std::uint32_t serial) {
+    if (packet.size() >= 255) {
+        return;
     }
+    const auto begin = output.size();
+    output.insert(output.end(), {'O', 'g', 'g', 'S', 0, flags});
+    for (int index = 0; index < 8; ++index) {
+        output.push_back(static_cast<Byte>(granule >> (index * 8)));
+    }
+    for (int index = 0; index < 4; ++index) {
+        output.push_back(static_cast<Byte>(serial >> (index * 8)));
+    }
+    for (int index = 0; index < 4; ++index) {
+        output.push_back(static_cast<Byte>(sequence >> (index * 8)));
+    }
+    output.insert(output.end(), 4, 0);
+    output.push_back(1);
+    output.push_back(static_cast<Byte>(packet.size()));
+    output.insert(output.end(), packet.begin(), packet.end());
+    const auto crc = OggCrc(std::span(output).subspan(begin));
+    for (int index = 0; index < 4; ++index) {
+        output[begin + 22 + index] = static_cast<Byte>(crc >> (index * 8));
+    }
+}
+
+std::vector<Byte> MinimalOgg(std::span<const Byte> identification) {
+    std::vector<Byte> result;
+    AppendOggPage(result, identification, 0x06, 960, 0, 1);
     return result;
 }
 
@@ -430,19 +447,26 @@ std::vector<Byte> OpusIdentification() {
     std::copy(kOpus.begin(), kOpus.end(), packet.begin());
     packet[8] = 1;
     packet[9] = 2;
-    return MinimalOgg(packet);
+    constexpr std::array<Byte, 16> kTags{'O', 'p', 'u', 's', 'T', 'a', 'g', 's',
+                                         0,   0,   0,   0,   0,   0,   0,   0};
+    constexpr std::array<Byte, 3> kAudio{0xf8, 0xff, 0xfe};
+    std::vector<Byte> result;
+    AppendOggPage(result, packet, 0x02, 0, 0, 1);
+    AppendOggPage(result, kTags, 0, 0, 1, 1);
+    AppendOggPage(result, kAudio, 0x04, 960, 2, 1);
+    return result;
 }
 
 std::vector<Byte> VorbisIdentification() {
-    std::vector<Byte> packet(30);
-    constexpr std::array<Byte, 7> kVorbis{1, 'v', 'o', 'r', 'b', 'i', 's'};
-    std::copy(kVorbis.begin(), kVorbis.end(), packet.begin());
-    packet[11] = 2;
-    packet[12] = 0x44;
-    packet[13] = 0xac;
-    packet[28] = 0xb8;
-    packet[29] = 1;
-    return MinimalOgg(packet);
+    const auto encoded = ::ysm::test::kVorbis44100Base64;
+    std::vector<Byte> decoded(encoded.size() * 3 / 4 + 3);
+    auto size = ::ysm::codec::Base64Decode(StrBuf(encoded), decoded);
+    EXPECT_TRUE(size.ok());
+    if (!size.ok()) {
+        return {};
+    }
+    decoded.resize(*size);
+    return decoded;
 }
 
 TEST(LegacyHistoricalDecoderTest, ClassifiesHistoricalSoundsBeforeMapCommit) {
@@ -465,7 +489,7 @@ TEST(LegacyHistoricalDecoderTest, ClassifiesHistoricalSoundsBeforeMapCommit) {
               SoundEncoding::kVorbis);
     EXPECT_EQ(vorbis->common.sounds.front().second.value.channels, 2);
     EXPECT_EQ(vorbis->common.sounds.front().second.value.sample_rate, 44'100);
-    EXPECT_EQ(vorbis->common.sounds.front().second.value.samples, 960);
+    EXPECT_EQ(vorbis->common.sounds.front().second.value.samples, 1'103);
 
     constexpr std::array<Byte, 6> kMp3{'I', 'D', '3', 4, 0, 0};
     auto unknown = Decode(MakeCurrentSoundFixture(kMp3));
@@ -482,20 +506,18 @@ TEST(LegacyHistoricalDecoderTest, ClassifiesHistoricalSoundsBeforeMapCommit) {
 }
 
 TEST(LegacyHistoricalDecoderTest, AccountsForNonZeroOpusGranuleOrigin) {
-    const auto* configured = std::getenv("YSM_AUDIO_FIXTURE_DIR");
-    if (configured == nullptr || *configured == '\0') {
-        GTEST_SKIP() << "YSM_AUDIO_FIXTURE_DIR is not configured";
-    }
-    const auto path = std::filesystem::path(configured) / "opus-origin.ogg";
-    std::ifstream input(path, std::ios::binary | std::ios::ate);
-    ASSERT_TRUE(input) << path;
-    const auto size = input.tellg();
-    ASSERT_GT(size, 0);
-    std::vector<Byte> bytes(static_cast<std::size_t>(size));
-    input.seekg(0);
-    input.read(reinterpret_cast<char*>(bytes.data()),
-               static_cast<std::streamsize>(size));
-    ASSERT_TRUE(input);
+    constexpr std::array<Byte, 19> kHead{'O', 'p', 'u', 's', 'H', 'e', 'a',
+                                         'd', 1,   2,   0x38, 1,   0,   0,
+                                         0,   0,   0,   0,   0};
+    constexpr std::array<Byte, 16> kTags{'O', 'p', 'u', 's', 'T', 'a', 'g', 's',
+                                         0,   0,   0,   0,   0,   0,   0,   0};
+    constexpr std::array<Byte, 3> kAudio{0xf8, 0xff, 0xfe};
+    constexpr std::uint64_t kOrigin = 48'000;
+    std::vector<Byte> bytes;
+    AppendOggPage(bytes, kHead, 0x02, 0, 0, 1);
+    AppendOggPage(bytes, kTags, 0, 0, 1, 1);
+    AppendOggPage(bytes, kAudio, 0, kOrigin + 960, 2, 1);
+    AppendOggPage(bytes, kAudio, 0x04, kOrigin + 1'800, 3, 1);
 
     const auto decoded = Decode(MakeCurrentSoundFixture(bytes));
     ASSERT_TRUE(decoded.ok()) << decoded.status();
@@ -503,7 +525,7 @@ TEST(LegacyHistoricalDecoderTest, AccountsForNonZeroOpusGranuleOrigin) {
     const auto& sound = decoded->common.sounds.front().second.value;
     EXPECT_EQ(sound.encoding, SoundEncoding::kOpus);
     EXPECT_EQ(sound.sample_rate, 48'000);
-    EXPECT_EQ(sound.samples, 60'001);
+    EXPECT_EQ(sound.samples, 1'488);
 }
 
 TEST(LegacyHistoricalDecoderTest, SilentlyOmitsUnknownSoundFamilies) {
@@ -604,6 +626,79 @@ TEST(LegacyHistoricalDecoderTest, AcceptsEveryHistoricalVersion) {
         ASSERT_TRUE(result.ok()) << result.status();
         EXPECT_EQ(result->version, version);
         EXPECT_EQ(result->info.hash, kModelHash);
+    }
+}
+
+TEST(LegacyHistoricalDecoderTest, MaterializesDefaultWheelAnimations) {
+    for (std::uint32_t version = 1; version <= 32; ++version) {
+        SCOPED_TRACE(version);
+        const auto fixture = MakeFixture(version);
+        auto decoded = Decode(fixture);
+        ASSERT_TRUE(decoded.ok()) << decoded.status();
+        decoded->info.properties.extra_animation.clear();
+        decoded->info.properties.extra_animation_classify.emplace_back();
+        decoded->info.properties.extra_animation_classify.back().id = "poses";
+        decoded->info.properties.extra_animation_classify.back().animations = {
+            {"pose", "Pose"}};
+        const auto converted = conversion::Convert(std::move(*decoded), fixture.size());
+        ASSERT_TRUE(converted.ok()) << converted.status();
+        const auto manifest =
+            ParsePayload<proto::manifest::Manifest>(converted->payloads[0]);
+        const auto& settings = manifest.info.settings;
+        ASSERT_EQ(settings.extra_animation.size(), 8);
+        for (std::size_t index = 0; index < 8; ++index) {
+            EXPECT_EQ(settings.extra_animation[index].key,
+                      "extra" + std::to_string(index));
+            EXPECT_TRUE(settings.extra_animation[index].value.empty());
+        }
+        ASSERT_EQ(settings.extra_animation_classify.size(), 1);
+        EXPECT_EQ(settings.extra_animation_classify.front().id, "poses");
+    }
+}
+
+TEST(LegacyHistoricalDecoderTest, PreservesExplicitWheelAnimations) {
+    const auto fixture = MakeFixture(32);
+    auto decoded = Decode(fixture);
+    ASSERT_TRUE(decoded.ok()) << decoded.status();
+    decoded->info.properties.extra_animation = {{"wave", "Wave"}};
+    const auto converted = conversion::Convert(std::move(*decoded), fixture.size());
+    ASSERT_TRUE(converted.ok()) << converted.status();
+    const auto manifest =
+        ParsePayload<proto::manifest::Manifest>(converted->payloads[0]);
+    ASSERT_EQ(manifest.info.settings.extra_animation.size(), 1);
+    EXPECT_EQ(manifest.info.settings.extra_animation.front().key, "wave");
+    EXPECT_EQ(manifest.info.settings.extra_animation.front().value, "Wave");
+}
+
+TEST(LegacyHistoricalDecoderTest, ConvertsSharedPlaintextConcurrently) {
+    const auto fixture = MakeFixture(32);
+    const auto convert = [&fixture]() -> absl::StatusOr<ImportResult> {
+        auto model = Decode(fixture);
+        if (!model.ok()) {
+            return model.status();
+        }
+        return conversion::Convert(std::move(*model), fixture.size());
+    };
+    const auto expected = convert();
+    ASSERT_TRUE(expected.ok()) << expected.status();
+
+    std::array<std::future<absl::StatusOr<ImportResult>>, 4> imports;
+    std::latch start(imports.size());
+    for (auto& pending : imports) {
+        pending = std::async(std::launch::async, [&convert, &start] {
+            start.arrive_and_wait();
+            return convert();
+        });
+    }
+    for (auto& pending : imports) {
+        const auto imported = pending.get();
+        ASSERT_TRUE(imported.ok()) << imported.status();
+        EXPECT_EQ(imported->metadata.model_id, expected->metadata.model_id);
+        ASSERT_EQ(imported->payloads.size(), expected->payloads.size());
+        for (std::size_t index = 0; index < imported->payloads.size(); ++index) {
+            EXPECT_TRUE(std::ranges::equal(imported->payloads[index].bytes,
+                                           expected->payloads[index].bytes));
+        }
     }
 }
 
@@ -862,6 +957,7 @@ TEST(LegacyHistoricalDecoderTest,
 
     const auto manifest =
         ParsePayload<proto::manifest::Manifest>(result.payloads[0]);
+    EXPECT_TRUE(manifest.common_assets.sounds.empty());
     ASSERT_EQ(manifest.render_targets.size(), 2);
     EXPECT_EQ(manifest.render_targets[0].target_id, "player");
     EXPECT_EQ(manifest.render_targets[1].target_id, "projectile-1");
@@ -873,7 +969,7 @@ TEST(LegacyHistoricalDecoderTest,
                     decoded->model_id.size()));
     ASSERT_TRUE(manifest.info.icon_source.has_value());
     EXPECT_EQ(*manifest.info.icon_source,
-              proto::manifest::info::PreviewSource::PREVIEW_SOURCE_RAW);
+              proto::manifest::info::PreviewSource::kRaw);
     EXPECT_FALSE(manifest.info.thumbnail_source.has_value());
     ASSERT_EQ(manifest.info.settings.extra_animation_buttons.size(), 1);
     const auto& inert_form =
@@ -904,8 +1000,7 @@ TEST(LegacyHistoricalDecoderTest,
         player.geo_models,
         [](const auto& entry) { return entry.key == "main"; });
     ASSERT_NE(main_entry, player.geo_models.end());
-    proto::asset::model::data::GeoModel main_geo{};
-    main_geo.from_pb(main_entry->value);
+    const auto& main_geo = main_entry->value;
     ASSERT_EQ(main_geo.bones.size(), 1);
     EXPECT_EQ(main_geo.bones.front().parent, "missing");
     ASSERT_EQ(player.animation_files.size(), 1);
@@ -951,6 +1046,14 @@ TEST(LegacyHistoricalDecoderTest,
     EXPECT_EQ(result.payloads[8].name, "thumb-icon");
     EXPECT_EQ(result.payloads[9].name, "a.ogg");
     EXPECT_EQ(result.payloads[10].name, "z.ogg");
+    ASSERT_TRUE(result.payloads[9].sound.has_value());
+    EXPECT_EQ(result.payloads[9].sound->channels, 2);
+    EXPECT_EQ(result.payloads[9].sound->sample_rate, 48'000);
+    EXPECT_EQ(result.payloads[9].sound->frames, 960);
+    ASSERT_TRUE(result.payloads[10].sound.has_value());
+    EXPECT_EQ(result.payloads[10].sound->channels, 2);
+    EXPECT_EQ(result.payloads[10].sound->sample_rate, 44'100);
+    EXPECT_EQ(result.payloads[10].sound->frames, 960);
 
     auto repeated = conversion::Convert(*decoded, fixture.size());
     ASSERT_TRUE(repeated.ok()) << repeated.status();
@@ -1013,10 +1116,12 @@ TEST(LegacyHistoricalDecoderTest, ProjectsSharedCubeAttributesOnce) {
         source_cube.quads.emplace_back(std::move(quad));
     }
     auto second_cube = source_cube;
-    decoded->player->geo_models.front().second.value.bones.front().cubes.emplace_back(
-        std::move(source_cube));
-    decoded->player->geo_models.front().second.value.bones.front().cubes.emplace_back(
-        std::move(second_cube));
+    decoded->player->geo_models.front()
+        .second.value.bones.front()
+        .cubes.emplace_back(std::move(source_cube));
+    decoded->player->geo_models.front()
+        .second.value.bones.front()
+        .cubes.emplace_back(std::move(second_cube));
 
     auto projected = conversion::Convert(*decoded, 1);
     ASSERT_TRUE(projected.ok()) << projected.status();
@@ -1026,8 +1131,7 @@ TEST(LegacyHistoricalDecoderTest, ProjectsSharedCubeAttributesOnce) {
         player.geo_models,
         [](const auto& entry) { return entry.key == "main"; });
     ASSERT_NE(main_entry, player.geo_models.end());
-    proto::asset::model::data::GeoModel main_geo{};
-    main_geo.from_pb(main_entry->value);
+    const auto& main_geo = main_entry->value;
     ASSERT_EQ(main_geo.cubes.cubes_legacy.size(), 2);
     for (const auto& cube : main_geo.cubes.cubes_legacy) {
         EXPECT_EQ(cube.faceCount, kFaces.size());
@@ -1036,7 +1140,8 @@ TEST(LegacyHistoricalDecoderTest, ProjectsSharedCubeAttributesOnce) {
         ASSERT_EQ(cube.uv.size(), 8);
         ASSERT_EQ(cube.uv_indices.size(), kFaces.size() * 4);
         for (std::size_t face = 0; face < kFaces.size(); ++face) {
-            for (std::size_t vertex = 0; vertex < kFaces[face].size(); ++vertex) {
+            for (std::size_t vertex = 0; vertex < kFaces[face].size();
+                 ++vertex) {
                 const auto projected_vertex = face * 4 + vertex;
                 EXPECT_EQ(cube.pos_indices[projected_vertex],
                           kFaces[face][vertex]);

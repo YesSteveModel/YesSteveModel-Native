@@ -10,7 +10,8 @@
 namespace ysm::gfx::renderer::internal {
 namespace {
 TEST(ParallelExecutorPolicyTest, CreatesValidPlatformConfig) {
-    EXPECT_GE(ParallelExecutor::Get().GetThreadCount(), 3);
+    EXPECT_GE(ParallelExecutor::Get().GetThreadCount(), 2);
+    EXPECT_LE(ParallelExecutor::Get().GetThreadCount(), 8);
 }
 
 TEST(ParallelExecutorTest, TreatsRequestedSizeAsTotalWorkerCount) {

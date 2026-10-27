@@ -3,7 +3,6 @@
 #include <cstdlib>
 #include <cstdio>
 #include <iterator>
-#include <utility>
 
 #include <absl/base/log_severity.h>
 #include <absl/container/inlined_vector.h>
@@ -95,6 +94,8 @@ public:
     }
 };
 
+}  // namespace
+
 std::size_t PushLoggingScope(std::string_view name, bool no_source) {
     auto& scopes = GetLoggingThreadContext().scopes;
     auto depth = scopes.size();
@@ -109,28 +110,12 @@ void PopLoggingScope(std::size_t depth) noexcept {
     }
     scopes.pop_back();
 }
-}  // namespace
 
 absl::LogSink* GetLogSink() {
     static YsmLogSink sink;
     return &sink;
 }
 }  // namespace log_internal
-
-LoggingScope::LoggingScope(std::string name, bool no_source)
-    : owned_name_(std::move(name)),
-      name_(owned_name_),
-      depth_(log_internal::PushLoggingScope(name_, no_source)) {}
-
-LoggingScope::LoggingScope(std::string_view name, bool no_source)
-    : name_(name), depth_(log_internal::PushLoggingScope(name_, no_source)) {}
-
-LoggingScope::LoggingScope(const char* name, bool no_source)
-    : LoggingScope(std::string_view{name}, no_source) {}
-
-LoggingScope::~LoggingScope() noexcept {
-    log_internal::PopLoggingScope(depth_);
-}
 
 namespace {
 struct AbslLogConfig {

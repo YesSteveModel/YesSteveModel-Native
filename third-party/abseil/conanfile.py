@@ -5,7 +5,7 @@ import re
 from conan import ConanFile
 from conan.tools.apple import is_apple_os
 from conan.tools.build import check_min_cppstd
-from conan.tools.cmake import CMake, CMakeToolchain
+from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain
 from conan.tools.files import copy, load, rmdir, save
 
 
@@ -16,7 +16,7 @@ class AbseilConan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     exports_sources = "patches/*", "src/*"
     name = "abseil"
-    version = "20260107.1"
+    version = "20260817.0"
     license = "Apache-2.0"
     description = "Abseil Common Libraries (C++) from Google"
     homepage = "https://github.com/abseil/abseil-cpp"
@@ -35,7 +35,17 @@ class AbseilConan(ConanFile):
         check_min_cppstd(self, 17)
 
     def generate(self):
+        deps = CMakeDeps(self)
+        deps.generate()
+
         tc = CMakeToolchain(self)
+        tc.variables["YSM_REQUIRED_PACKAGES"] = ";".join(
+            deps.get_cmake_package_name(dependency)
+            for dependency in self.dependencies.direct_host.values()
+        )
+        tc.variables["YSM_GLOBAL_LINK_TARGETS"] = ";".join(
+            self._build_data.get("global_link_targets", [])
+        )
         for key, value in self._build_data.get("options", {}).items():
             tc.cache_variables[key] = value
         if self.settings.os == "Windows" and self.settings.compiler in ["msvc", "clang"]:
@@ -101,6 +111,8 @@ class AbseilConan(ConanFile):
         for dependency in values:
             if dependency.startswith("absl::"):
                 component.setdefault("requires", []).append(dependency.replace("absl::", "absl_"))
+            elif dependency == "mimalloc-static":
+                component.setdefault("requires", []).append("mimalloc::mimalloc")
             elif self.settings.os in ["Linux", "FreeBSD"]:
                 if dependency == "Threads::Threads":
                     component.setdefault("system_libs", []).append("pthread")

@@ -1,0 +1,19 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index e6b7dfe..80d738a 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -616,12 +616,12 @@ if(MI_DEBUG_UBSAN)
+   endif()
+ endif()
+ 
+-if(CMAKE_SYSTEM_NAME MATCHES "Linux|Android")
++if(CMAKE_SYSTEM_NAME MATCHES "Linux|Android" OR "${TARGET_OS}" STREQUAL "ANDROID")
+   if(MI_NO_THP)
+     set(MI_ALLOW_THP "OFF")
+   endif()
+   if(MI_ALLOW_THP STREQUAL "DEFAULT")
+-    if(CMAKE_SYSTEM_NAME MATCHES "Android")
++    if(ANDROID OR CMAKE_SYSTEM_NAME MATCHES "Android" OR "${TARGET_OS}" STREQUAL "ANDROID")
+       set(MI_ALLOW_THP "OFF")
+     else()
+       set(MI_ALLOW_THP "FULL")

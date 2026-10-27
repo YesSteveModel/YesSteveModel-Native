@@ -57,33 +57,4 @@ Linux 示例:
 
 完成后可使用支持 CMake 的 IDE 打开并索引此项目。
 
-# 官方构建环境
-
-此为官方构建使用的完整工具链和环境，可基于此复现官方构建。
-
-<sub>*有点复杂，常规开发不推荐手动复现。*</sub>
-
-## 工具链
-
-| 组件 | 版本     |
-| --- |--------|
-| LLVM | 22.1.5 |
-| CMake | 4.3.4  |
-| Ninja | 1.13.2 |
-| NASM | 3.01   |
-| Conan | 2.29.1 |
-
-- Windows target 使用 clang-cl 编译器前端；
-- 所有 target 均使用 lld 链接器。
-
-## 目标环境
-
-| 目标 | 内核/平台基线                                    | C 标准库 | STL + runtime                             | SDK / sysroot |
-| --- |--------------------------------------------| --- |-------------------------------------------| --- |
-| Windows x86_64 | Windows 10.0.26100.0 API Surface           | UCRT 10.0.26100.0 和 MSVC CRT 14.51 | MSVC STL v145 / 14.51                     | Windows SDK 10.0.26100.0 和 VC toolset 14.51.36231 |
-| Linux x86_64 | Linux 3.13.9 内核头文件                         | glibc 2.19 | libc++ 22.1.5；libc++abi 和 libunwind     | Ubuntu 14.04 sysroot |
-| Android arm64 | Android API 28       | Bionic | NDK libc++ 21.0.0；libc++abi 和 libunwind | Android NDK r29（29.0.14206865）sysroot |
-| macOS arm64 | Darwin 23.5.0；macOS 14.5 deployment target | macOS SDK 提供的 libSystem | libc++ 22.1.5；libc++abi 和 libunwind     | macOS 14.5 SDK |
-
-- macOS target 链接自构建的 `libc++_static.a`，因此不会使用 macOS SDK 提供的动态 libc++ runtime。
-- Linux x86_64 和 macOS arm64 target 使用的 libc++ runtime 均启用了 unstable ABI v2.
+官方构建使用的工具链版本与目标环境见[官方构建环境](official-build-environment_cn.md)。

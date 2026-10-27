@@ -31,7 +31,7 @@ struct alignas(64) RenderBoneState {
     uint32_t packed_translucent_color;
     bool uniform_scale;
 
-    bool ok = true;
+    RenderResult result = RenderResult::kSuccess;
 };
 
 class alignas(64) RenderState {
@@ -50,7 +50,7 @@ public:
                         const ModelState& model_state);
 
     template <typename SimdTag>
-    absl::Status Update(SimdTag tag, const RenderParameters& params,
+    RenderResult Update(SimdTag tag, const RenderParameters& params,
                         const ModelState& model_state,
                         uint32_t worker_index, uint32_t worker_count);
 

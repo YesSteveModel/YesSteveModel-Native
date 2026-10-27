@@ -1,0 +1,117 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index f377c42..940558a 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,4 +1,4 @@
+-cmake_minimum_required(VERSION 2.8.12)
++cmake_minimum_required(VERSION 3.5)
+ project(vorbis)
+ 
+ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+@@ -67,14 +67,10 @@ find_package(Ogg REQUIRED)
+ add_subdirectory(lib)
+ 
+ configure_pkg_config_file(vorbis.pc.in)
+-configure_pkg_config_file(vorbisenc.pc.in)
+-configure_pkg_config_file(vorbisfile.pc.in)
+ 
+ install(
+     FILES
+     ${CMAKE_CURRENT_BINARY_DIR}/vorbis.pc
+-    ${CMAKE_CURRENT_BINARY_DIR}/vorbisenc.pc
+-    ${CMAKE_CURRENT_BINARY_DIR}/vorbisfile.pc
+     DESTINATION
+     ${CMAKE_INSTALL_LIBDIR}/pkgconfig
+ )
+diff --git a/lib/CMakeLists.txt b/lib/CMakeLists.txt
+index 7cd68e5..42f76e9 100644
+--- a/lib/CMakeLists.txt
++++ b/lib/CMakeLists.txt
+@@ -1,7 +1,5 @@
+ set(VORBIS_PUBLIC_HEADERS
+     ../include/vorbis/codec.h
+-    ../include/vorbis/vorbisenc.h
+-    ../include/vorbis/vorbisfile.h
+ )
+ 
+ set(VORBIS_HEADERS
+@@ -49,22 +47,8 @@ set(VORBIS_SOURCES
+     bitrate.c
+ )
+ 
+-set(VORBISFILE_SOURCES
+-    vorbisfile.c
+-)
+-
+-set(VORBISENC_SOURCES
+-    vorbisenc.c
+-)
+-
+-if(WIN32)
+-    list(APPEND VORBIS_SOURCES vorbisenc.c)
+-endif()
+-
+ if(WIN32)
+     list(APPEND VORBIS_SOURCES ../win32/vorbis.def)
+-    list(APPEND VORBISENC_SOURCES ../win32/vorbisenc.def)
+-    list(APPEND VORBISFILE_SOURCES ../win32/vorbisfile.def)
+ endif()
+ 
+ if(MSVC)
+@@ -75,15 +59,9 @@ endif()
+ 
+ if (NOT BUILD_FRAMEWORK)
+     add_library(vorbis ${VORBIS_HEADERS} ${VORBIS_SOURCES})
+-    add_library(vorbisenc ${VORBISENC_SOURCES})
+-    add_library(vorbisfile ${VORBISFILE_SOURCES})
+ 
+     get_version_info(VORBIS_VERSION_INFO "V_LIB_CURRENT" "V_LIB_AGE" "V_LIB_REVISION")
+     set_target_properties(vorbis PROPERTIES SOVERSION ${VORBIS_VERSION_INFO})
+-    get_version_info(VORBISENC_VERSION_INFO "VE_LIB_CURRENT" "VE_LIB_AGE" "VE_LIB_REVISION")
+-    set_target_properties(vorbisenc PROPERTIES SOVERSION ${VORBISENC_VERSION_INFO})
+-    get_version_info(VORBISFILE_VERSION_INFO "VF_LIB_CURRENT" "VF_LIB_AGE" "VF_LIB_REVISION")
+-    set_target_properties(vorbisfile PROPERTIES SOVERSION ${VORBISFILE_VERSION_INFO})
+ 
+     target_include_directories(vorbis
+         PUBLIC
+@@ -92,29 +70,15 @@ if (NOT BUILD_FRAMEWORK)
+        PRIVATE
+             ${CMAKE_CURRENT_SOURCE_DIR}
+     )
+-    target_include_directories(vorbisenc
+-        PUBLIC
+-            $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+-            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+-        PRIVATE
+-            ${CMAKE_CURRENT_SOURCE_DIR}
+-    )
+-    target_include_directories(vorbisfile
+-        PUBLIC
+-            $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+-            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+-    )
+-
+     target_link_libraries(vorbis
+         PUBLIC Ogg::ogg
+         PRIVATE $<$<BOOL:${HAVE_LIBM}>:m>
+     )
++    target_compile_definitions(vorbis PRIVATE YSM_OGG_USE_MIMALLOC=1)
+-    target_link_libraries(vorbisenc PUBLIC vorbis)
+-    target_link_libraries(vorbisfile PUBLIC vorbis)
+ 
+     install(FILES ${VORBIS_PUBLIC_HEADERS} DESTINATION ${CMAKE_INSTALL_FULL_INCLUDEDIR}/vorbis)
+ 
+-    install(TARGETS vorbis vorbisenc vorbisfile
++    install(TARGETS vorbis
+         EXPORT VorbisTargets
+         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+@@ -148,7 +111,7 @@ if (NOT BUILD_FRAMEWORK)
+ 
+     endif()
+ else()
+-    add_library(vorbis ${VORBIS_PUBLIC_HEADERS} ${VORBIS_HEADERS} ${VORBIS_SOURCES} ${VORBISFILE_SOURCES} ${VORBISENC_SOURCES})
++    add_library(vorbis ${VORBIS_PUBLIC_HEADERS} ${VORBIS_HEADERS} ${VORBIS_SOURCES})
+     set_target_properties(vorbis PROPERTIES
+         FRAMEWORK TRUE
+         FRAMEWORK_VERSION ${PROJECT_VERSION}

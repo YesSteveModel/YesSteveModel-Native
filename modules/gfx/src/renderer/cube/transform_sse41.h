@@ -38,6 +38,7 @@ YSM_INLINE __m128 InverseSqrtSse41(__m128 value) noexcept {
 #endif
 }
 
+YSM_TARGET_SSE41
 YSM_INLINE Sse41Vec3 TransformPointSse41(const mat4 matrix, __m128 x,
                                             __m128 y, __m128 z) noexcept {
     auto x_xy = _mm_mul_ps(x, _mm_set1_ps(matrix[0][0]));
@@ -58,6 +59,7 @@ YSM_INLINE Sse41Vec3 TransformPointSse41(const mat4 matrix, __m128 x,
             _mm_add_ps(z_xy, z_zt)};
 }
 
+YSM_TARGET_SSE41
 YSM_INLINE Sse41Vec3 TransformDirectionSse41(
     const mat3 matrix, __m128 x, __m128 y, __m128 z) noexcept {
     auto x_xy = _mm_mul_ps(x, _mm_set1_ps(matrix[0][0]));
@@ -75,6 +77,7 @@ YSM_INLINE Sse41Vec3 TransformDirectionSse41(
             _mm_add_ps(z_xy, z_z)};
 }
 
+YSM_TARGET_SSE41
 YSM_INLINE Sse41Vec3 TransformDirectionSse41(
     const mat4 matrix, __m128 x, __m128 y, __m128 z) noexcept {
     auto x_xy = _mm_mul_ps(x, _mm_set1_ps(matrix[0][0]));
@@ -92,6 +95,7 @@ YSM_INLINE Sse41Vec3 TransformDirectionSse41(
             _mm_add_ps(z_xy, z_z)};
 }
 
+YSM_TARGET_SSE41
 YSM_INLINE __m128 DotSse41(__m128 x, __m128 y, __m128 z, __m128 w,
                            const vec4 coefficients) noexcept {
     auto xy = _mm_mul_ps(x, _mm_set1_ps(coefficients[0]));
@@ -101,6 +105,7 @@ YSM_INLINE __m128 DotSse41(__m128 x, __m128 y, __m128 z, __m128 w,
     return _mm_add_ps(xy, zw);
 }
 
+YSM_TARGET_SSE41
 YSM_INLINE __m128 DirectionValiditySse41(__m128 length_squared) noexcept {
     return _mm_and_ps(
         _mm_cmpgt_ps(length_squared, _mm_setzero_ps()),
@@ -108,6 +113,7 @@ YSM_INLINE __m128 DirectionValiditySse41(__m128 length_squared) noexcept {
                      _mm_set1_ps(std::numeric_limits<float>::max())));
 }
 
+YSM_TARGET_SSE41
 YSM_INLINE void NormalizeDirectionSse41(Sse41Vec3& direction) noexcept {
     const auto length_xy =
         _mm_add_ps(_mm_mul_ps(direction.x, direction.x),
@@ -124,6 +130,7 @@ YSM_INLINE void NormalizeDirectionSse41(Sse41Vec3& direction) noexcept {
     direction.z = _mm_and_ps(valid, _mm_mul_ps(direction.z, inverse_length));
 }
 
+YSM_TARGET_SSE41
 YSM_INLINE void NormalizeDirectionsSse41(Sse41Vec3& first,
                                          Sse41Vec3& second) noexcept {
     const auto first_xy =
@@ -151,6 +158,7 @@ YSM_INLINE void NormalizeDirectionsSse41(Sse41Vec3& first,
     second.z = _mm_and_ps(second_valid, _mm_mul_ps(second.z, second_inverse));
 }
 
+YSM_TARGET_SSE41
 YSM_INLINE __m128i ConvertSnorm8Sse41(__m128 value) noexcept {
     const auto scaled = _mm_mul_ps(value, _mm_set1_ps(127.0f));
     const auto rounded =
@@ -162,6 +170,7 @@ YSM_INLINE __m128i ConvertSnorm8Sse41(__m128 value) noexcept {
     return _mm_and_si128(result, _mm_set1_epi32(0xff));
 }
 
+YSM_TARGET_SSE41
 YSM_INLINE Sse41Vec2u ConvertSnorm8PairSse41(__m128 first,
                                                __m128 second) noexcept {
     const auto scale = _mm_set1_ps(127.0f);
@@ -184,6 +193,7 @@ YSM_INLINE Sse41Vec2u ConvertSnorm8PairSse41(__m128 first,
             _mm_and_si128(second_int, byte_mask)};
 }
 
+YSM_TARGET_SSE41
 YSM_INLINE __m128i PackSnorm4x8Sse41(__m128 x, __m128 y, __m128 z,
                                      __m128 w) noexcept {
     const auto packed_xy_values = ConvertSnorm8PairSse41(x, y);
@@ -197,6 +207,7 @@ YSM_INLINE __m128i PackSnorm4x8Sse41(__m128 x, __m128 y, __m128 z,
     return _mm_or_si128(packed_xy, packed_zw);
 }
 
+YSM_TARGET_SSE41
 YSM_INLINE __m128i PackSnorm3x8Sse41(__m128 x, __m128 y,
                                      __m128 z) noexcept {
     const auto packed_xy_values = ConvertSnorm8PairSse41(x, y);
@@ -206,6 +217,7 @@ YSM_INLINE __m128i PackSnorm3x8Sse41(__m128 x, __m128 y,
     return _mm_or_si128(_mm_or_si128(packed_x, packed_y), packed_z);
 }
 
+YSM_TARGET_SSE41
 YSM_INLINE uint32_t StoreBackFacesSse41(bool* destination,
                                         __m128 back_face) noexcept {
     const auto values =
@@ -218,6 +230,7 @@ YSM_INLINE uint32_t StoreBackFacesSse41(bool* destination,
     return static_cast<uint32_t>(_mm_movemask_ps(back_face));
 }
 
+YSM_TARGET_SSE41
 YSM_INLINE __m128 BackFaceSignSse41(uint32_t back_face_bits) noexcept {
     const auto bits =
         _mm_set1_epi32(static_cast<int32_t>(back_face_bits));
@@ -230,6 +243,7 @@ YSM_INLINE __m128 BackFaceSignSse41(uint32_t back_face_bits) noexcept {
 
 template <bool kCulling, bool kIris, bool kHasPbr, bool kPosOnly,
           typename CubeGroupType>
+YSM_TARGET_SSE41
 YSM_INLINE void TransformSingleQuadSse41(
     const CubeGroupType& cube_group, const RenderBoneState& state,
     CubeOutput<CubeGroupType>& out) {
@@ -243,10 +257,11 @@ YSM_INLINE void TransformSingleQuadSse41(
     _mm_store_ps(out.pos[2].data(), position.z);
 
     TransformQuadAttributes<kCulling, kIris, kHasPbr, kPosOnly>(
-        cube_group, state, out, 0);
+        simd::Tag<simd::Type::SSE41>{}, cube_group, state, out, 0);
 }
 
 template <typename CubeGroupType>
+YSM_TARGET_SSE41
 YSM_INLINE void TransformPositionBatchSse41(
     const CubeGroupType& cube_group, const RenderBoneState& state,
     CubeOutput<CubeGroupType>& out, uint32_t offset) {
@@ -265,6 +280,7 @@ YSM_INLINE void TransformPositionBatchSse41(
 
 template <bool kIris, bool kHasPbr, bool kPosOnly,
           typename CubeGroupType>
+YSM_TARGET_SSE41
 YSM_INLINE void TransformQuadBatchSse41(
     const CubeGroupType& cube_group, const RenderBoneState& state,
     CubeOutput<CubeGroupType>& out, uint32_t offset) {
@@ -361,6 +377,7 @@ YSM_INLINE void TransformQuadBatchSse41(
 
 template <bool kIris, bool kHasPbr, bool kPosOnly,
           typename CubeGroupType>
+YSM_TARGET_SSE41
 void TransformSingleCubeSse41(const CubeGroupType& cube_group,
                               const RenderBoneState& state,
                               CubeOutput<CubeGroupType>& out) {
@@ -378,6 +395,7 @@ void TransformSingleCubeSse41(const CubeGroupType& cube_group,
 template <bool kCulling, bool kIris, bool kHasPbr, bool kPosOnly,
           typename CubeGroupType>
     requires(CubeGroupType::kCubeGroupCapacity == 2)
+YSM_TARGET_SSE41
 void Transform(simd::Tag<simd::Type::SSE41>,
                const CubeGroupType& cube_group,
                const RenderBoneState& state,

@@ -7,7 +7,7 @@ patches:
   2.3.3:
   - patch_file: patches/zlib-ng.patch
 requirements:
-- mimalloc/3.5.3@ysm/stable
+- mimalloc/3.6.0@ysm/stable
 build:
   global_link_targets:
   - mimalloc-static

@@ -2,6 +2,10 @@
 
 [构建指南](build_cn.md)：工具链、依赖准备与构建流程。
 
+[依赖接入](dependencies_cn.md)：添加 Conan 依赖、注入 mimalloc target 与分配器 patch 规则。
+
+[非官方平台适配](platform-porting_cn.md)：新增 OS、架构或 runtime 的适配范围、成本与验证要点。
+
 [基建总览](infrastructure_cn.md)：尽量复用现有基建。
 - 现有公开门面能够承担职责时，必须复用，不在业务模块复制 helper 或建立平行抽象。
 - 契约不足时，优先扩展原门面。只有职责、生命周期或性能约束不同且无法合理扩展时，才新增机制，并说明不能复用的原因与维护成本。
@@ -9,9 +13,11 @@
 ## 语言与设计
 
 - 使用 C++23；禁止 coroutine，包括 `co_await`、`co_yield`、`co_return` 和自建 coroutine runtime。
-- 遵循 Google C++ Style Guide，使用四空格缩进。行宽是软约束；换行优先保证可读性。
+- 遵循 Google C++ Style Guide；使用四空格缩进；行宽是软约束，换行优先保证可读性。
 - 项目定义的所有 C++ 符号必须位于 `ysm` 或其子命名空间中。
 - `std::string` 中的文本统一使用 UTF-8；仅为减少拷贝、提高性能而保留系统编码时，变量名必须显式包含 `native` 标识，以区别于 UTF-8 文本。
+- 使用 `std::string_view` 或 `CStringView` 表示字符串借用，避免使用 `const std::string&`、`const char[]` 或 `const char*`。
+- 字符串字面量使用 `_sv` 后缀声明；该后缀定义于 `<c_string_view.h>`，位于 `ysm` 命名空间。
 - 以函数式、声明式组合为主。仅在需要封装所有权、生命周期、持续状态、不变量或行为契约时引入 class。
 - 尽量避免虚函数；编译期多态使用重载、模板和 CRTP 等模式，运行时多态使用 Microsoft Proxy。
 - 禁止 `dynamic_cast`；允许 `std::any_cast`。
@@ -24,7 +30,7 @@
   - 使用 `std::span` 表示连续内存访问。
   - C 库边界必须补充所有权与生命周期契约，并在适配层立即把裸指针转换或封装为安全类型，不向业务代码传播。
 - 需要智能指针时，优先使用 `std::unique_ptr`。
-- 使用智能指针，若无法从对象类型语义推断可空性，必须由接口/变量名称或注释来显式反映。
+- 使用智能指针，若无法从上下文或对象类型语义推断可空性，必须由接口/变量名称来显式反映。
 - 避免 `std::unordered_map` / `std::unordered_set`，使用 `absl::flat_hash_map` / `absl::flat_hash_set`。
 - 项目代码只使用 `enum class`；wire、JNI、bit-pack 和 ABI 边界显式指定底层类型。生成代码与第三方代码除外。
 - 能由函数、模板或 `constexpr` 表达的能力不新增宏。
@@ -44,7 +50,7 @@
 - 所有 Conan 依赖必须构建并静态链接；生产构建只产出一个动态库，不携带其他动态库。
 - 开发任务允许引入新依赖。引入前评估官方 target 的可构建性、许可证、体积、线程/初始化模型、异常/RTTI/ABI 假设及维护成本。
 - 依赖链接到最窄的消费 target；仅当依赖类型出现在 public header 时使用 `PUBLIC` / `INTERFACE`。同步更新 Conan 配置、导入 target、锁定信息和 `THIRD_PARTY_LICENSES.md`。
-- 现有通用库包括 Abseil、pystring（Python 语义字符串处理）、Microsoft Proxy（非继承式 type erasure）、optional_ref、magic_enum、cglm、FlatBuffers、yalantinglibs、mimalloc、cpu_features 和 Tracy。
+- 现有通用库包括 Abseil、pystring（Python 语义字符串处理）、Microsoft Proxy（非继承式 type erasure）、optional_ref、magic_enum、cglm、yalantinglibs、mimalloc、cpu_features 和 Tracy。
 
 ### Module 概览
 
@@ -65,14 +71,12 @@ CMake target 按 `ysm-<module>` 命名。
 
 ## 平台与 ISA 基线
 
-完整工具链版本见[构建指南](build_cn.md)。官方 target 的最低基线为：
-
 | target | ISA | OS / runtime |
 | --- | --- | --- |
-| Windows x86_64 | `x86-64-v1` | Windows 7 SP1，Windows SDK 10.0.26100 |
-| Linux x86_64 | `x86-64-v1` | Linux 3.13.9 headers、glibc 2.19、Ubuntu 14.04 sysroot |
-| Android arm64 | `armv8-a` | Android API 28、Bionic、NDK r29 |
-| macOS arm64 | Apple M1 | Darwin 23.5.0、macOS 14.5 |
+| Windows x86_64 | [`x86-64-v1`](https://clang.llvm.org/docs/UsersManual.html#x86) | Windows 7 SP1 |
+| Linux x86_64 | [`x86-64-v1`](https://clang.llvm.org/docs/UsersManual.html#x86) | Linux 3.13.9 + glibc 2.19 |
+| Android arm64 | `armv8-a` | Android API 28 |
+| macOS arm64 | Apple M1（接近 `armv8.5-a`） | macOS 14.5 |
 
 更高 ISA 只能位于隔离函数中，并在 `InitCpuInfo()` 后通过 runtime feature dispatch 选择；不得进入通用函数、静态初始化或未分派的 inline 路径。
 
@@ -81,7 +85,7 @@ CMake target 按 `ysm-<module>` 命名。
 - 动态库默认隐藏符号，只导出外部 ABI 入口。所有导出均使用 C ABI；禁止导出 C++ ABI、普通工具、class、模板实例或第三方符号。
 - 导出入口使用 `extern "C"`、固定宽度标量、显式 buffer 或 opaque handle；不得跨动态库/JNI 边界暴露 STL、异常、`absl::Status` 或 C++ owner。
 - 新增导出时同步维护平台 export list / version script，并明确兼容责任。
-- 除明确要求使用平台 C allocator 的路径外，禁止直接调用 `malloc`、`calloc`、`realloc` 和 `free`。Conan 依赖中的此类调用也必须通过配置或 patch 替换为项目分配器。
+- 除明确要求使用平台 C allocator 的路径外，禁止直接调用 `malloc`、`calloc`、`realloc` 和 `free`。进入生产制品的 Conan 依赖中的此类调用也必须通过配置或 patch 替换为项目分配器；仅供测试或性能基准使用的依赖不要求接入 mimalloc。
 - `thread_local` 对象的构造或析构路径存在直接或间接动态分配时，其 allocator-aware 成员必须使用 `SystemAllocator`，包括嵌套 string/vector。
 - runtime、日志、CPU feature 和 JavaVM 状态使用显式初始化，不依赖跨 translation unit 的静态或 `thread_local` 初始化顺序。
 - 不新增无明确 owner、停止协议、背压和 shutdown 顺序的长期线程或队列。

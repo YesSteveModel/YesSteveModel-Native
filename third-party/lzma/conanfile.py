@@ -8,7 +8,7 @@ class LzmaConan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     exports_sources = "patches/*", "src/*"
     name = "lzma"
-    version = "25.01"
+    version = "26.02"
     license = ""
     package_type = "static-library"
 

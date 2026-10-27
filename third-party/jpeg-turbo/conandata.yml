@@ -1,22 +1,25 @@
 sources:
-  3.1.90:
+  3.2.0:
     url: https://github.com/libjpeg-turbo/libjpeg-turbo
-    tag: 3.1.90
-    commit: e1dbfa7be7b7e54922020051dc77781e92739700
+    tag: 3.2.0
+    commit: c85e6b905bf237038faa936dab160ebfc5da0344
 patches:
-  3.1.90:
+  3.2.0:
   - patch_file: patches/jpeg-turbo.patch
   - patch_file: patches/jpeg-turbo-mimalloc.patch
 requirements:
-- mimalloc/3.5.3@ysm/stable
+- zlib-ng/2.3.3@ysm/stable
+- mimalloc/3.6.0@ysm/stable
 build:
   global_link_targets:
   - mimalloc-static
+  - zlib-ng-static
   options:
     ENABLE_SHARED: false
     WITH_ARITH_ENC: false
     WITH_TESTS: false
     WITH_TOOLS: false
+    WITH_SYSTEM_ZLIB: true
   install: true
   copy_built_libraries: true
 package:

@@ -1,8 +1,8 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index c0c9767..33050c4 100644
+index d3f849d0..18b2c37d 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -331,10 +331,6 @@ function(check_flag lang flag)
+@@ -341,10 +341,6 @@ function(check_flag lang flag)
      string(REGEX REPLACE "[^A-Za-z0-9]" "_" flag_var "${flag}")
      if(NOT DEFINED ${lang}_FLAG${flag_var})
          execute_process(COMMAND ${CMAKE_COMMAND} -E echo_append "-- Checking ${lang} flag support for: [${flag}] - ")
@@ -13,7 +13,7 @@ index c0c9767..33050c4 100644
          if("${lang}" STREQUAL "CXX")
              check_cxx_compiler_flag("${flag}" "${lang}_FLAG${flag_var}")
          else()
-@@ -520,8 +516,7 @@ set_property(DIRECTORY .
+@@ -533,8 +529,7 @@ set_property(DIRECTORY .
          SAFECLIB_STR_NULL_SLACK=1
          $<$<BOOL:${HAVE_STRNLEN_S}>:HAVE_STRNLEN_S=1>
          $<$<BOOL:${HAVE_STRNCPY_S}>:HAVE_STRNCPY_S=1>

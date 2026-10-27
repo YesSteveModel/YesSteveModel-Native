@@ -10,7 +10,7 @@ constexpr size_t Base64EncodeOutputMaxSize(size_t data_size) {
 }
 
 constexpr size_t Base64DecodeOutputMaxSize(size_t base64_size) {
-    return base64_size * 2 / 3 + 2;
+    return base64_size / 4 * 3 + base64_size % 4 * 3 / 4;
 }
 
 absl::StatusOr<size_t> Base64Encode(BufferViewR input, BufferView output);

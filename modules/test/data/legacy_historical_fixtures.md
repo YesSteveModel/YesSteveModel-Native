@@ -48,4 +48,5 @@ finite reader.
 
 The focused test changes one parser invariant at a time: versions 0/33, half-float v25, truncated/trailing plaintext, wrong-length/non-hex hash, dangling/cyclic parent, non-finite schema field, unknown enum, invalid optional tag, duplicate map key, noncanonical varint, and collection limit + 1. A fixed-seed mutation smoke run adds 512 arbitrary inputs and one bit mutation at every byte position of a valid v32 fixture. Expected failures use only numeric `StatusCode` identity; diagnostic text is not an oracle.
 
-Private corpus remains read-only and is not copied or represented by reversible path data in this fixture package. Corpus-derived coverage and redacted provenance belong to W8 evidence closure.
+Concurrent tests share the submitted dynamic envelope vector and a synthetic
+v32 plaintext fixture. Each worker owns its decoder and conversion state.

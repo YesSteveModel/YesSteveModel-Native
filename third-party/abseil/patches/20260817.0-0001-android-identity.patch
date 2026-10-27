@@ -1,0 +1,53 @@
+diff --git a/CMake/AbseilDll.cmake b/CMake/AbseilDll.cmake
+index 8abab5d..b8e5b5a 100644
+--- a/CMake/AbseilDll.cmake
++++ b/CMake/AbseilDll.cmake
+@@ -870,7 +870,7 @@ function(absl_make_dll)
+     PRIVATE
+       ${_dll_libs}
+       ${ABSL_DEFAULT_LINKOPTS}
+-      $<$<BOOL:${ANDROID}>:-llog>
++      $<$<OR:$<BOOL:${ANDROID}>,$<STREQUAL:${TARGET_OS},ANDROID>>:-llog>
+       $<$<BOOL:${MINGW}>:-ladvapi32>
+       $<$<BOOL:${MINGW}>:-ldbghelp>
+       $<$<BOOL:${MINGW}>:-lbcrypt>
+diff --git a/absl/base/CMakeLists.txt b/absl/base/CMakeLists.txt
+index 2a20d74..921d556 100644
+--- a/absl/base/CMakeLists.txt
++++ b/absl/base/CMakeLists.txt
+@@ -14,7 +14,12 @@
+ # limitations under the License.
+ #
+ 
+-find_library(LIBRT rt)
++if(ANDROID OR "${TARGET_OS}" STREQUAL "ANDROID")
++  set(ABSL_LIBRT_LINKOPTS)
++else()
++  find_library(LIBRT rt)
++  set(ABSL_LIBRT_LINKOPTS $<$<BOOL:${LIBRT}>:-lrt>)
++endif()
+ 
+ # Internal-only target, do not depend on directly.
+ absl_cc_library(
+@@ -302,7 +307,7 @@ absl_cc_library(
+     ${ABSL_DEFAULT_COPTS}
+   LINKOPTS
+     ${ABSL_DEFAULT_LINKOPTS}
+-    $<$<BOOL:${LIBRT}>:-lrt>
++    ${ABSL_LIBRT_LINKOPTS}
+     $<$<BOOL:${MINGW}>:-ladvapi32>
+   DEPS
+     absl::atomic_hook
+diff --git a/absl/log/CMakeLists.txt b/absl/log/CMakeLists.txt
+index e0a307b..e348962 100644
+--- a/absl/log/CMakeLists.txt
++++ b/absl/log/CMakeLists.txt
+@@ -234,7 +234,7 @@ absl_cc_library(
+     ${ABSL_DEFAULT_COPTS}
+   LINKOPTS
+     ${ABSL_DEFAULT_LINKOPTS}
+-    $<$<BOOL:${ANDROID}>:-llog>
++    $<$<OR:$<BOOL:${ANDROID}>,$<STREQUAL:${TARGET_OS},ANDROID>>:-llog>
+   DEPS
+     absl::base
+     absl::cleanup

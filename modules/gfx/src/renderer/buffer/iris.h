@@ -6,7 +6,6 @@
 
 #include "cpu.h"
 #include "empty.h"
-#include "iris/extended.h"
 #include "non_copyable.h"
 #include "quad_ref.h"
 #include "gfx/renderer/render.h"

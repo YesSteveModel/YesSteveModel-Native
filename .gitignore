@@ -6,3 +6,6 @@
 /CMakeUserPresets.json
 /conan/cache
 __pycache__
+
+# ci
+!/.github/

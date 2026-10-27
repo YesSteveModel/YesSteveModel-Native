@@ -49,7 +49,7 @@ void Transform(simd::GenericTag, const CubeGroupType& cube_group,
                 CubeGroupType::GetQuadAttrIndex(cube_index, quad_index);
             internal::TransformQuadAttributes<
                 kCulling, kIris, kHasPbr, kPosOnly>(
-                cube_group, state, out, attr_index);
+                simd::GenericTag{}, cube_group, state, out, attr_index);
         }
     }
 }

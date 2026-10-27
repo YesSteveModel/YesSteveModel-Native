@@ -15,7 +15,7 @@ patches:
     base_path: cryptopp-src
   - patch_file: patches/cmake-entry.patch
 requirements:
-- mimalloc/3.5.3@ysm/stable
+- mimalloc/3.6.0@ysm/stable
 - cpu_features/0.11.0@ysm/stable
 build:
   global_link_targets:

@@ -100,6 +100,10 @@ struct CStringView {
     char const* data_ = "";
     Size size_ = 0;
 };
+
+constexpr CStringView operator""_sv(char const* str, size_t size) noexcept {
+    return {str, size};
+}
 }  // namespace ysm
 
 namespace std {

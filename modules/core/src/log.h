@@ -1,9 +1,11 @@
 #pragma once
 
+#include <concepts>
 #include <cstddef>
 #include <format>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <absl/log/absl_log.h>
 #include <absl/log/log_sink.h>
@@ -77,14 +79,22 @@
 namespace ysm {
 namespace log_internal {
 absl::LogSink* GetLogSink();
+std::size_t PushLoggingScope(std::string_view name, bool no_source);
+void PopLoggingScope(std::size_t depth) noexcept;
 }
 
+template <typename Name>
+    requires(std::same_as<Name, std::string> ||
+             std::same_as<Name, std::string_view>)
 class [[nodiscard]] LoggingScope final {
 public:
-    explicit LoggingScope(std::string name, bool no_source = false);
-    explicit LoggingScope(std::string_view name, bool no_source = false);
-    explicit LoggingScope(const char* name, bool no_source = false);
-    ~LoggingScope() noexcept;
+    explicit LoggingScope(Name name, bool no_source = false)
+        : name_(std::move(name)),
+          depth_(log_internal::PushLoggingScope(name_, no_source)) {}
+
+    ~LoggingScope() noexcept {
+        log_internal::PopLoggingScope(depth_);
+    }
 
     LoggingScope(const LoggingScope&) = delete;
     LoggingScope& operator=(const LoggingScope&) = delete;
@@ -92,10 +102,11 @@ public:
     LoggingScope& operator=(LoggingScope&&) = delete;
 
 private:
-    std::string owned_name_;
-    std::string_view name_;
+    Name name_;
     std::size_t depth_;
 };
+
+LoggingScope(const char*, bool = false) -> LoggingScope<std::string_view>;
 
 enum class LogLevel : int {
     kAll,

@@ -19,7 +19,7 @@ class Re2Conan(ConanFile):
 
     def requirements(self):
         self.requires(
-            "abseil/20260107.1@ysm/stable",
+            "abseil/20260817.0@ysm/stable",
             transitive_headers=True,
             transitive_libs=True,
         )

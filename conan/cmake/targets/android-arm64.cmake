@@ -30,4 +30,9 @@ if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
         LLVM
         -Wl,--icf=all
     )
+
+    if (HAS_ANDROID_LIBCXX_LTO)
+        # 依赖于启用了 LTO 的 libc++，NDK 内的没有。
+        add_custom_link_options(-Wl,--lto-whole-program-visibility)
+    endif ()
 endif()

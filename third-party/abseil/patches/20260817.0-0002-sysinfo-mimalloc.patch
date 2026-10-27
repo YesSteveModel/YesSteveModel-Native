@@ -1,0 +1,13 @@
+diff --git a/absl/base/internal/sysinfo.cc b/absl/base/internal/sysinfo.cc
+index b103f49..550de7e 100644
+--- a/absl/base/internal/sysinfo.cc
++++ b/absl/base/internal/sysinfo.cc
+@@ -70,6 +70,8 @@
+ #include "absl/base/internal/unscaledcycleclock.h"
+ #include "absl/base/thread_annotations.h"
+ 
++#include <mimalloc-override.h>
++
+ namespace absl {
+ ABSL_NAMESPACE_BEGIN
+ namespace base_internal {

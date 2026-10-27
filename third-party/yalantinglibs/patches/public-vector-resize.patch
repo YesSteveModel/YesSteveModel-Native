@@ -1,0 +1,131 @@
+diff --git a/include/ylt/standalone/iguana/detail/string_resize.hpp b/include/ylt/standalone/iguana/detail/string_resize.hpp
+index 81d4605..00d2913 100644
+--- a/include/ylt/standalone/iguana/detail/string_resize.hpp
++++ b/include/ylt/standalone/iguana/detail/string_resize.hpp
+@@ -75,57 +75,9 @@ inline void resize(std::basic_string<ch> &raw_str, std::size_t sz) {
+ 
+ #endif
+ 
+-#if (defined(_MSC_VER) && _MSC_VER <= 1920)
+-#else
+-void vector_set_length_hacker(std::vector<char> &self, std::size_t sz);
+-
+-template <typename Function, Function func_ptr>
+-class vector_thief {
+- public:
+-  friend void vector_set_length_hacker(std::vector<char> &self,
+-                                       std::size_t sz) {
+-#if defined(_MSVC_STL_VERSION)
+-    (self.*func_ptr)._Myval2._Mylast = self.data() + sz;
+-#else
+-#if defined(_LIBCPP_VERSION)
+-#if _LIBCPP_VERSION < 14000
+-    ((*(std::__vector_base<char, std::allocator<char> > *)(&self)).*func_ptr) =
+-        self.data() + sz;
+-#else
+-    (self.*func_ptr) = self.data() + sz;
+-#endif
+-#else
+-#if defined(__GLIBCXX__)
+-    ((*(std::_Vector_base<char, std::allocator<char> > *)(&self)).*func_ptr)
+-        ._M_finish = self.data() + sz;
+-#endif
+-#endif
+-#endif
+-  }
+-};
+-
+-#if defined(__GLIBCXX__)  // libstdc++
+-template class vector_thief<decltype(&std::vector<char>::_M_impl),
+-                            &std::vector<char>::_M_impl>;
+-#elif defined(_LIBCPP_VERSION)
+-template class vector_thief<decltype(&std::vector<char>::__end_),
+-                            &std::vector<char>::__end_>;
+-#elif defined(_MSVC_STL_VERSION)
+-template class vector_thief<decltype(&std::vector<char>::_Mypair),
+-                            &std::vector<char>::_Mypair>;
+-#endif
+-
++// Vector growth must preserve element lifetime and sanitizer bookkeeping.
+ template <typename ch>
+ inline void resize(std::vector<ch> &raw_vec, std::size_t sz) {
+-#if defined(__GLIBCXX__) ||                                       \
+-    (defined(_LIBCPP_VERSION) && defined(_LIBCPP_HAS_NO_ASAN)) || \
+-    defined(_MSVC_STL_VERSION)
+-  std::vector<char> &vec = *reinterpret_cast<std::vector<char> *>(&raw_vec);
+-  vec.reserve(sz);
+-  vector_set_length_hacker(vec, sz);
+-#else
+   raw_vec.resize(sz);
+-#endif
+ }
+-#endif
+ };  // namespace iguana::detail
+\ No newline at end of file
+diff --git a/include/ylt/struct_pack/util.h b/include/ylt/struct_pack/util.h
+index d52f7e9..dd01619 100644
+--- a/include/ylt/struct_pack/util.h
++++ b/include/ylt/struct_pack/util.h
+@@ -209,61 +209,11 @@ inline void resize(std::basic_string<ch> &raw_str, std::size_t sz) {
+ 
+ #endif
+ 
+-#if (defined(_MSC_VER) && _MSC_VER <= 1920)
+-#else
+-void vector_set_length_hacker(std::vector<char> &self, std::size_t sz);
+-
+-template <typename Function, Function func_ptr>
+-class vector_thief {
+- public:
+-  friend void vector_set_length_hacker(std::vector<char> &self,
+-                                       std::size_t sz) {
+-#if defined(_MSVC_STL_VERSION)
+-    (self.*func_ptr)._Myval2._Mylast = self.data() + sz;
+-#else
+-#if defined(_LIBCPP_VERSION)
+-#if _LIBCPP_VERSION < 14000
+-    ((*(std::__vector_base<char, std::allocator<char>> *)(&self)).*func_ptr) =
+-        self.data() + sz;
+-#else
+-    (self.*func_ptr) = self.data() + sz;
+-#endif
+-#else
+-#if defined(__GLIBCXX__)
+-    ((*(std::_Vector_base<char, std::allocator<char>> *)(&self)).*func_ptr)
+-        ._M_finish = self.data() + sz;
+-#endif
+-#endif
+-#endif
+-  }
+-};
+-
+-#if defined(__GLIBCXX__)  // libstdc++
+-template class vector_thief<decltype(&std::vector<char>::_M_impl),
+-                            &std::vector<char>::_M_impl>;
+-#elif defined(_LIBCPP_VERSION)
+-template class vector_thief<decltype(&std::vector<char>::__end_),
+-                            &std::vector<char>::__end_>;
+-#elif defined(_MSVC_STL_VERSION)
+-template class vector_thief<decltype(&std::vector<char>::_Mypair),
+-                            &std::vector<char>::_Mypair>;
+-#endif
+-
++// Vector growth must preserve element lifetime and sanitizer bookkeeping.
+ template <typename ch>
+ inline void resize(std::vector<ch> &raw_vec, std::size_t sz) {
+-#if defined(__SANITIZE_ADDRESS__) || struct_pack_has_feature(address_sanitizer)
+-  raw_vec.resize(sz);
+-#elif defined(__GLIBCXX__) ||                                     \
+-    (defined(_LIBCPP_VERSION) && defined(_LIBCPP_HAS_NO_ASAN)) || \
+-    defined(_MSVC_STL_VERSION)
+-  std::vector<char> &vec = *reinterpret_cast<std::vector<char> *>(&raw_vec);
+-  vec.reserve(sz * sizeof(ch));
+-  vector_set_length_hacker(vec, sz * sizeof(ch));
+-#else
+   raw_vec.resize(sz);
+-#endif
+ }
+-#endif
+ 
+ #undef struct_pack_has_feature
+ 

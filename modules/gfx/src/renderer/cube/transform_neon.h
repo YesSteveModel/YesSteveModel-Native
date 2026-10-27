@@ -256,7 +256,7 @@ YSM_INLINE void TransformSingleQuadNeon(
     vst1q_f32(out.pos[2].data(), position.z);
 
     TransformQuadAttributes<kCulling, kIris, kHasPbr, kPosOnly>(
-        cube_group, state, out, 0);
+        simd::Tag<simd::Type::NEON>{}, cube_group, state, out, 0);
 }
 
 template <uint32_t kCubeCount, bool kCulling, bool kIris, bool kHasPbr,

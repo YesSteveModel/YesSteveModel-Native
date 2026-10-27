@@ -1,5 +1,5 @@
 diff --git a/Source/Lib/Codec/corner_detect.c b/Source/Lib/Codec/corner_detect.c
-index 3060670..9bc6754 100644
+index 3060670b..9bc6754c 100644
 --- a/Source/Lib/Codec/corner_detect.c
 +++ b/Source/Lib/Codec/corner_detect.c
 @@ -13,6 +13,7 @@
@@ -11,19 +11,19 @@ index 3060670..9bc6754 100644
  // Fast_9 wrapper
  #define FAST_BARRIER 18
 diff --git a/Source/Lib/Codec/grainSynthesis.c b/Source/Lib/Codec/grainSynthesis.c
-index dc5b96a..be8f3a9 100644
+index 0f0b083a..c4f1e7c1 100644
 --- a/Source/Lib/Codec/grainSynthesis.c
 +++ b/Source/Lib/Codec/grainSynthesis.c
-@@ -19,6 +19,7 @@
- #include <stdlib.h>
- #include "grainSynthesis.h"
+@@ -21,6 +21,7 @@
+ #include "common_dsp_rtcd.h"
+ #include "definitions.h"
  #include "svt_log.h"
 +#include <mimalloc-override.h>
  
  // Samples with Gaussian distribution in the range of [-2048, 2047] (12 bits)
  // with zero mean and standard deviation of about 512.
 diff --git a/Source/Lib/Codec/noise_model.c b/Source/Lib/Codec/noise_model.c
-index 4da7f1e..7961318 100644
+index 20bee772..b7b91173 100644
 --- a/Source/Lib/Codec/noise_model.c
 +++ b/Source/Lib/Codec/noise_model.c
 @@ -23,6 +23,7 @@
@@ -35,7 +35,7 @@ index 4da7f1e..7961318 100644
  static const int32_t k_max_lag = 4;
  
 diff --git a/Source/Lib/Codec/noise_util.c b/Source/Lib/Codec/noise_util.c
-index ac0c26b..39dad8f 100644
+index ac0c26b3..39dad8f8 100644
 --- a/Source/Lib/Codec/noise_util.c
 +++ b/Source/Lib/Codec/noise_util.c
 @@ -16,6 +16,7 @@
@@ -47,7 +47,7 @@ index ac0c26b..39dad8f 100644
  float svt_aom_noise_psd_get_default_value(int32_t block_size, float factor) {
      return (factor * factor / 10000) * block_size * block_size / 8;
 diff --git a/Source/Lib/Codec/svt_log.c b/Source/Lib/Codec/svt_log.c
-index b662ae8..4c62784 100644
+index b662ae80..4c62784d 100644
 --- a/Source/Lib/Codec/svt_log.c
 +++ b/Source/Lib/Codec/svt_log.c
 @@ -17,6 +17,7 @@
@@ -59,7 +59,7 @@ index b662ae8..4c62784 100644
  #if !CONFIG_LOG_QUIET
  
 diff --git a/Source/Lib/Codec/svt_malloc.c b/Source/Lib/Codec/svt_malloc.c
-index 1b843fe..f9c764e 100644
+index 1b843fe5..f9c764e8 100644
 --- a/Source/Lib/Codec/svt_malloc.c
 +++ b/Source/Lib/Codec/svt_malloc.c
 @@ -22,6 +22,7 @@ void svt_print_alloc_fail_impl(const char* file, int line) {
@@ -71,7 +71,7 @@ index 1b843fe..f9c764e 100644
  static EbHandle g_malloc_mutex;
  
 diff --git a/Source/Lib/Codec/svt_malloc.h b/Source/Lib/Codec/svt_malloc.h
-index 3988ea9..69e02a4 100644
+index 1fe0680b..cf39d3d6 100644
 --- a/Source/Lib/Codec/svt_malloc.h
 +++ b/Source/Lib/Codec/svt_malloc.h
 @@ -15,6 +15,7 @@
@@ -80,9 +80,9 @@ index 3988ea9..69e02a4 100644
  #include "definitions.h"
 +#include <mimalloc.h>
  
- #ifndef NDEBUG
- #define DEBUG_MEMORY_USAGE
-@@ -69,7 +70,7 @@ static inline void* svt_aom_memalign(size_t align, size_t size) {
+ #ifdef __cplusplus
+ extern "C" {
+@@ -73,7 +74,7 @@ static inline void* svt_aom_memalign(size_t align, size_t size) {
          return NULL;
      }
  #endif
@@ -91,7 +91,7 @@ index 3988ea9..69e02a4 100644
      if (addr) {
          x = align_addr((uint8_t*)addr + ADDRESS_STORAGE_SIZE, align);
          set_actual_malloc_address(x, addr);
-@@ -84,7 +85,7 @@ static inline void* svt_aom_malloc(size_t size) {
+@@ -88,7 +89,7 @@ static inline void* svt_aom_malloc(size_t size) {
  static inline void svt_aom_free(void* memblk) {
      if (memblk) {
          void* addr = get_actual_malloc_address(memblk);
@@ -100,7 +100,7 @@ index 3988ea9..69e02a4 100644
      }
  }
  
-@@ -154,7 +155,7 @@ void svt_remove_mem_entry(void* ptr, EbPtrType type);
+@@ -158,7 +159,7 @@ void svt_remove_mem_entry(void* ptr, EbPtrType type);
  
  #define EB_NO_THROW_MALLOC(pointer, size)                \
      do {                                                 \
@@ -109,7 +109,7 @@ index 3988ea9..69e02a4 100644
          EB_NO_THROW_ADD_MEM(malloced_p, size, EB_N_PTR); \
          pointer = malloced_p;                            \
      } while (0)
-@@ -183,7 +184,7 @@ void svt_remove_mem_entry(void* ptr, EbPtrType type);
+@@ -187,7 +188,7 @@ void svt_remove_mem_entry(void* ptr, EbPtrType type);
  
  #define EB_NO_THROW_CALLOC(pointer, count, size)              \
      do {                                                      \
@@ -118,7 +118,7 @@ index 3988ea9..69e02a4 100644
          EB_NO_THROW_ADD_MEM(pointer, count * size, EB_C_PTR); \
      } while (0)
  
-@@ -201,7 +202,7 @@ void svt_remove_mem_entry(void* ptr, EbPtrType type);
+@@ -205,7 +206,7 @@ void svt_remove_mem_entry(void* ptr, EbPtrType type);
  #define EB_FREE(pointer)                        \
      do {                                        \
          EB_REMOVE_MEM_ENTRY(pointer, EB_N_PTR); \
@@ -127,7 +127,7 @@ index 3988ea9..69e02a4 100644
          pointer = NULL;                         \
      } while (0)
  
-@@ -220,7 +221,7 @@ void svt_remove_mem_entry(void* ptr, EbPtrType type);
+@@ -224,7 +225,7 @@ void svt_remove_mem_entry(void* ptr, EbPtrType type);
  #define EB_REALLOC_ARRAY(pa, count)            \
      do {                                       \
          size_t s_ra = sizeof(*(pa)) * (count); \
@@ -136,7 +136,7 @@ index 3988ea9..69e02a4 100644
          if (p_ra) {                            \
              EB_REMOVE_MEM_ENTRY(pa, EB_N_PTR); \
              EB_ADD_MEM(p_ra, s_ra, EB_N_PTR);  \
-@@ -234,7 +235,7 @@ void svt_remove_mem_entry(void* ptr, EbPtrType type);
+@@ -238,7 +239,7 @@ void svt_remove_mem_entry(void* ptr, EbPtrType type);
      do {                                                \
          size_t    s_ra = sizeof(*(pa)) * (count);       \
          uintptr_t pa_i = (uintptr_t)pa;                 \
@@ -145,7 +145,7 @@ index 3988ea9..69e02a4 100644
          if (p_ra) {                                     \
              EB_REMOVE_MEM_ENTRY((void*)pa_i, EB_N_PTR); \
              EB_NO_THROW_ADD_MEM(p_ra, s_ra, EB_N_PTR);  \
-@@ -294,20 +295,20 @@ void svt_remove_mem_entry(void* ptr, EbPtrType type);
+@@ -298,20 +299,20 @@ void svt_remove_mem_entry(void* ptr, EbPtrType type);
  #ifdef _WIN32
  #define EB_MALLOC_ALIGNED(pointer, size)          \
      do {                                          \
@@ -169,7 +169,7 @@ index 3988ea9..69e02a4 100644
              return EB_ErrorInsufficientResources;                   \
          EB_ADD_MEM(pointer, size, EB_A_PTR);                        \
      } while (0)
-@@ -315,7 +316,7 @@ void svt_remove_mem_entry(void* ptr, EbPtrType type);
+@@ -319,7 +320,7 @@ void svt_remove_mem_entry(void* ptr, EbPtrType type);
  #define EB_FREE_ALIGNED(pointer)                \
      do {                                        \
          EB_REMOVE_MEM_ENTRY(pointer, EB_A_PTR); \
@@ -179,10 +179,10 @@ index 3988ea9..69e02a4 100644
      } while (0)
  #endif
 diff --git a/Source/Lib/Codec/svt_threads.c b/Source/Lib/Codec/svt_threads.c
-index 8cb6f14..721813b 100644
+index 0d3aa63e..d5dbae18 100644
 --- a/Source/Lib/Codec/svt_threads.c
 +++ b/Source/Lib/Codec/svt_threads.c
-@@ -48,6 +48,7 @@
+@@ -54,6 +54,7 @@
  #ifdef __APPLE__
  #include <dispatch/dispatch.h>
  #endif
@@ -191,7 +191,7 @@ index 8cb6f14..721813b 100644
  #include <time.h>
  #ifdef _WIN32
 diff --git a/third_party/fastfeat/fast.c b/third_party/fastfeat/fast.c
-index cc8950a..022c5f8 100644
+index cc8950a8..022c5f8b 100644
 --- a/third_party/fastfeat/fast.c
 +++ b/third_party/fastfeat/fast.c
 @@ -1,6 +1,7 @@
@@ -203,7 +203,7 @@ index cc8950a..022c5f8 100644
  
  xy* svt_aom_fast9_detect_nonmax(const byte* im, int xsize, int ysize, int stride, int b, int* ret_num_corners)
 diff --git a/third_party/fastfeat/fast_9.c b/third_party/fastfeat/fast_9.c
-index ecb5a79..3025767 100644
+index ecb5a790..3025767d 100644
 --- a/third_party/fastfeat/fast_9.c
 +++ b/third_party/fastfeat/fast_9.c
 @@ -1,6 +1,7 @@
@@ -215,7 +215,7 @@ index ecb5a79..3025767 100644
  typedef struct { int x, y; } xy;
  typedef unsigned char byte;
 diff --git a/third_party/fastfeat/nonmax.c b/third_party/fastfeat/nonmax.c
-index 9f9471e..1349e3d 100644
+index 9f9471e5..1349e3df 100644
 --- a/third_party/fastfeat/nonmax.c
 +++ b/third_party/fastfeat/nonmax.c
 @@ -1,6 +1,7 @@

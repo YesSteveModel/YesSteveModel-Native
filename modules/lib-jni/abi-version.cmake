@@ -1,0 +1,17 @@
+set(nativeAbiHeader "${CMAKE_CURRENT_LIST_DIR}/src/runtime/abi_version.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${nativeAbiHeader}")
+file(READ "${nativeAbiHeader}" nativeAbiDefinition)
+string(REGEX MATCH "kNativeAbi = \"([^\"]+)\"" nativeAbiMatch "${nativeAbiDefinition}")
+set(YSM_NATIVE_ABI "${CMAKE_MATCH_1}")
+if (NOT YSM_NATIVE_ABI MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9]+)?$")
+    message(FATAL_ERROR "Invalid native ABI in ${nativeAbiHeader}")
+endif ()
+string(REGEX REPLACE "[.-]" "_" YSM_NATIVE_ABI_SYMBOL "YSM_ABI_${YSM_NATIVE_ABI}")
+configure_file("${CMAKE_CURRENT_LIST_DIR}/src/runtime/abi_marker.cc.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/abi_marker.cc" @ONLY)
+target_sources(ysm-lib-jni PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/abi_marker.cc")
+
+if (YSM_MACOS)
+    file(READ "${CMAKE_CURRENT_LIST_DIR}/exported-symbols.txt" exportedSymbols)
+    file(WRITE "${exportedSymbolsFile}" "${exportedSymbols}\n_${YSM_NATIVE_ABI_SYMBOL}\n")
+endif ()

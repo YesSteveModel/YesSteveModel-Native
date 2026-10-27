@@ -19,17 +19,23 @@ YSM_BIT_PACK(PackedLightAndOverlay, jlong,
 }  // namespace
 
 YSM_JNI_ENTRY(
-    "Lcom/elfmcys/ysm/natives/render/NativeRenderer;nRender(Ljava/lang/Object;IJJJIJJ)Z",
+    "Lcom/elfmcys/ysm/natives/render/NativeRenderer;nRender(Ljava/lang/Object;IJJIJIJJ)I",
     (vertex_buffer_obj, vertex_buffer_flag, mat_ptr, model_state_ptr,
-     light_and_overlay, color, flags, iris_entity_id)) {
+     vertex_count, light_and_overlay, color, flags, iris_entity_id)) {
+    YSM_DECLARE_OR_RETURN(
+        model_state,
+        java::CastOpaquePtr<gfx::renderer::ModelState>(model_state_ptr));
+    YSM_ASSERT(model_state->IsValid() && vertex_count >= 0 &&
+                   static_cast<uint32_t>(vertex_count) == model_state->Schedule().vertex_count,
+               absl::FailedPreconditionError("ModelState publication count mismatch."));
+    if (vertex_count == 0) {
+        return static_cast<jint>(gfx::renderer::RenderResult::kSuccess);
+    }
     YSM_RETURN_IF_NULL(vertex_buffer_obj);
     YSM_ASSERT(mat_ptr != 0,
                absl::InvalidArgumentError("Render matrices are null."));
     const auto* mat =
         reinterpret_cast<const float*>(static_cast<uintptr_t>(mat_ptr));
-    YSM_DECLARE_OR_RETURN(
-        model_state,
-        java::CastOpaquePtr<gfx::renderer::ModelState>(model_state_ptr));
 
     const auto [context, vertex_kind] =
         PackedRenderFlags::unpack(flags);
@@ -64,7 +70,12 @@ YSM_JNI_ENTRY(
         std::bit_cast<gfx::renderer::Color>(static_cast<uint32_t>(color));
     parameters.iris_entity_id = static_cast<uint64_t>(iris_entity_id);
 
-    return gfx::renderer::Render(vertex_buffer, vertex_kind, *model_state,
-                            parameters);
+    gfx::renderer::RenderResult result;
+    const auto status = gfx::renderer::Render(vertex_buffer, vertex_kind, *model_state,
+                                             parameters, result);
+    if (!status.ok()) [[unlikely]] {
+        YSM_LOG_DEBUG_EVERY_N_SEC(5, "Native render failed: {}", status.message());
+    }
+    return static_cast<jint>(result);
 }
 }  // namespace ysm::lib::render

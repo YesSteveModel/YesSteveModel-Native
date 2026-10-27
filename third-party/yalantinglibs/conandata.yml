@@ -8,8 +8,10 @@ patches:
   - patch_file: patches/yalantinglibs.patch
   - patch_file: patches/package-only.patch
   - patch_file: patches/struct-pb-optional.patch
+  - patch_file: patches/struct-pb-enum-value-prefix.patch
+  - patch_file: patches/public-vector-resize.patch
 requirements:
-- mimalloc/3.5.3@ysm/stable
+- mimalloc/3.6.0@ysm/stable
 build:
   global_link_targets:
   - mimalloc-static

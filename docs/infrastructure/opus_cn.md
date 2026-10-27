@@ -4,15 +4,15 @@
 
 主要头文件：`<codec/opus.h>`。
 
-`codec::OpusAudioStream` 增量解码单一 Ogg/Opus logical stream，输出 48 kHz mono signed 16-bit PCM；双声道输入下混为 mono。`MiniOgg` 是内部 packet parser，不作为普通音频入口。
+`codec::OpusAudioStream` 增量解码单一 Ogg/Opus logical stream，输出 48 kHz mono signed 16-bit PCM；双声道输入下混为 mono。它与生成入口共用严格 Ogg page、packet 和 granule 语义；page reader 与 muxer 不是普通音频入口。规范化生成见[音频规范化](audio-normalization_cn.md)。
 
 ## 输入与结束协议
 
-构造参数 `expected_frames` 是经过媒体时间轴验证、扣除 pre-skip 和尾部裁剪后的精确输出 frame 数，按 48 kHz 计数；它参与最终完整性检查和尾部裁剪，不能用估算时长或容量上限代替。
+构造参数 `expected_frames` 是经过媒体时间轴验证、扣除 pre-skip 和尾部裁剪后的精确输出 frame 数，按 48 kHz 计数；decoder 从 Ogg granule 独立重建真实裁剪区间，再用该值做最终一致性检查，不能用估算时长或容量上限代替。
 
-- `Consume(bytes)` 复制输入，返回后调用方可释放或复用输入；按需 feed，避免累计未消费数据。
+- `Feed(bytes)` 只在本次同步调用期间借用输入，返回 `OpusFeedResult{consumed, status}`；调用方仅推进 `consumed`，并保活未消费后缀到后续 feed。跨调用只复制未完成 page/packet 的有界残片。
 - 输入源确认结束后调用 `EndInput()`，随后继续 `Decode` 排空输出。输入暂时不足时不要提前宣告结束。
-- `EndInput()` 或解码失败后不能再 `Consume`，否则抛 `std::logic_error`。失败对象不复用；新流创建新实例。
+- `EndInput()` 或解码失败后不能再 `Feed`。失败对象不复用；新流创建新实例。
 - 构造、feed 和 decode 都可能因分配失败抛异常；它们不是 `noexcept`。在可靠边界收敛异常，不将这些调用放入要求无分配、无异常的音频内层。
 
 ## 输出契约
@@ -54,7 +54,15 @@ absl::Status DecodeOpus(
                 Slice(pcm, 0, static_cast<size_t>(result))));
         } else if (result == codec::OpusAudioStream::kNeedInput) {
             if (next_chunk < chunks.size()) {
-                decoder.Consume(chunks[next_chunk++]);
+                auto input = chunks[next_chunk++];
+                while (!input.empty()) {
+                    YSM_DECLARE_OR_RETURN(feed, decoder.Feed(input));
+                    if (feed.consumed == 0) {
+                        return absl::DataLossError(
+                            "Decoder feed made no progress");
+                    }
+                    input = input.subspan(feed.consumed);
+                }
             } else if (!input_ended) {
                 decoder.EndInput();
                 input_ended = true;

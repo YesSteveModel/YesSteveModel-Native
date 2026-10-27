@@ -8,6 +8,6 @@ class CglmConan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     exports_sources = "patches/*", "src/*"
     name = "cglm"
-    version = "0.9.6"
+    version = "0.9.7"
     license = ""
     package_type = "header-library"

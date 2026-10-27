@@ -1,5 +1,10 @@
 #include <array>
 #include <regex>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <type_traits>
+#include <utility>
 
 #include <absl/base/log_severity.h>
 #include <absl/log/globals.h>
@@ -9,6 +14,21 @@
 
 namespace ysm {
 namespace {
+static_assert(std::same_as<decltype(LoggingScope(std::declval<std::string>())),
+                           LoggingScope<std::string>>);
+static_assert(std::same_as<decltype(LoggingScope(std::string_view{})),
+                           LoggingScope<std::string_view>>);
+static_assert(std::same_as<decltype(LoggingScope("literal")),
+                           LoggingScope<std::string_view>>);
+static_assert(std::same_as<decltype(LoggingScope(std::declval<char*>())),
+                           LoggingScope<std::string_view>>);
+static_assert(std::same_as<decltype(LoggingScope(std::declval<const char*>())),
+                           LoggingScope<std::string_view>>);
+static_assert(sizeof(LoggingScope<std::string_view>) <
+              sizeof(LoggingScope<std::string>));
+static_assert(!std::is_copy_constructible_v<LoggingScope<std::string_view>>);
+static_assert(!std::is_move_constructible_v<LoggingScope<std::string>>);
+
 struct LogLevelExpectation {
     LogLevel level;
     absl::LogSeverityAtLeast severity;
@@ -63,6 +83,77 @@ TEST(LogTest, DoesNotEvaluateDisabledDebugArguments) {
     YSM_LOG_DEBUG("Side effect: {}", ++value);
 
     EXPECT_EQ(value, 0);
+}
+
+TEST(LogTest, OwnsStringNames) {
+    ASSERT_TRUE(ConfigureLogLevel(static_cast<int>(LogLevel::kInfo)).ok());
+#if GTEST_HAS_STREAM_REDIRECTION
+    testing::internal::CaptureStdout();
+#endif
+    std::string name(80, 'x');
+    {
+        LoggingScope scope(name, true);
+        name.assign(80, 'y');
+        YSM_LOG(INFO, "copied name");
+    }
+    {
+        LoggingScope scope(std::string(80, 'z'), true);
+        YSM_LOG(INFO, "temporary name");
+    }
+#if GTEST_HAS_STREAM_REDIRECTION
+    const auto output = testing::internal::GetCapturedStdout();
+    EXPECT_NE(output.find("[" + std::string(80, 'x') + "] copied name"),
+              std::string::npos);
+    EXPECT_NE(output.find("[" + std::string(80, 'z') + "] temporary name"),
+              std::string::npos);
+#endif
+}
+
+TEST(LogTest, BorrowsStringViewsAndCharacterPointers) {
+    ASSERT_TRUE(ConfigureLogLevel(static_cast<int>(LogLevel::kInfo)).ok());
+#if GTEST_HAS_STREAM_REDIRECTION
+    testing::internal::CaptureStdout();
+#endif
+    char name[] = "view-tail";
+    {
+        LoggingScope scope(std::string_view(name, 4), true);
+        name[0] = 'V';
+        YSM_LOG(INFO, "borrowed view");
+    }
+    {
+        LoggingScope scope(name, true);
+        name[0] = 'C';
+        YSM_LOG(INFO, "borrowed pointer");
+    }
+#if GTEST_HAS_STREAM_REDIRECTION
+    const auto output = testing::internal::GetCapturedStdout();
+    EXPECT_NE(output.find("[View] borrowed view"), std::string::npos);
+    EXPECT_NE(output.find("[Ciew-tail] borrowed pointer"), std::string::npos);
+#endif
+}
+
+TEST(LogTest, RestoresOuterScopeAfterExceptionUnwinding) {
+    ASSERT_TRUE(ConfigureLogLevel(static_cast<int>(LogLevel::kInfo)).ok());
+#if GTEST_HAS_STREAM_REDIRECTION
+    testing::internal::CaptureStdout();
+#endif
+    {
+        LoggingScope outer("outer", true);
+        EXPECT_THROW(
+            {
+                LoggingScope inner(std::string(80, 'x'), true);
+                throw std::runtime_error("unwind logging scope");
+            },
+            std::runtime_error);
+        YSM_LOG(INFO, "outer log");
+    }
+    YSM_LOG(INFO, "unscoped log");
+#if GTEST_HAS_STREAM_REDIRECTION
+    const auto output = testing::internal::GetCapturedStdout();
+    EXPECT_NE(output.find("[outer] outer log"), std::string::npos);
+    EXPECT_NE(output.find("unscoped log"), std::string::npos);
+    EXPECT_EQ(output.find("[outer] unscoped log"), std::string::npos);
+#endif
 }
 }  // namespace
 }  // namespace ysm

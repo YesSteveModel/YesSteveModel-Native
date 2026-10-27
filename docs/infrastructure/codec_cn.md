@@ -2,7 +2,7 @@
 
 [返回基建总览](../infrastructure_cn.md)
 
-主要头文件：`<codec/blake3.h>`、`<codec/base64.h>`、`<codec/hex.h>`、`<codec/zstd.h>`、`<codec/zlib.h>`、`<codec/image.h>`、`<codec/archive.h>`、`<codec/java_random.h>`。
+主要头文件：`<codec/blake3.h>`、`<codec/base64.h>`、`<codec/hex.h>`、`<codec/zstd.h>`、`<codec/zlib.h>`、`<codec/image.h>`、`<codec/archive.h>`、`<codec/audio.h>`、`<codec/java_random.h>`。
 
 codec API 读取 `BufferViewR`，写入调用方 buffer 或 `BufferManaged`。输出 buffer 必须按实际写入长度截断。
 
@@ -45,4 +45,4 @@ entry 名称是不可信路径。写入文件系统前拒绝绝对路径、`..`�
 
 ## 音频与兼容工具
 
-Ogg/Opus 的输入、输出和结束协议见[Opus 流解码](opus_cn.md)。`JavaRandom` 仅用于复现 Java `Random` 序列，不是密码学 RNG。
+Ogg/Opus 的输入、输出和结束协议见[Opus 流解码](opus_cn.md)，生成期 inspect、R/T 候选与验证见[音频规范化](audio-normalization_cn.md)。`JavaRandom` 仅用于复现 Java `Random` 序列，不是密码学 RNG。

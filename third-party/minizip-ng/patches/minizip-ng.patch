@@ -1,5 +1,5 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 1cf379c..a4f80ca 100644
+index 9b4cfcd..d2b8827 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -190,62 +190,13 @@ if(MZ_LIBCOMP)
@@ -71,10 +71,10 @@ index 1cf379c..a4f80ca 100644
      if(MZ_ZLIB)
          list(APPEND MINIZIP_DEF -DHAVE_ZLIB)
 diff --git a/mz_os.c b/mz_os.c
-index 8ba7cc9..07c3088 100644
+index 4250f87..da58d61 100644
 --- a/mz_os.c
 +++ b/mz_os.c
-@@ -404,7 +404,7 @@ int32_t mz_dir_make(const char *path) {
+@@ -428,7 +428,7 @@ int32_t mz_dir_make(const char *path) {
      if (!*path)
          return MZ_OK;
  
@@ -106,7 +106,7 @@ index b0378a2..2074169 100644
  
          if (stat(name, &path_stat) == 0) {
 diff --git a/mz_strm_split.c b/mz_strm_split.c
-index 417de08..0664446 100644
+index 5f59ddd..bd5a33f 100644
 --- a/mz_strm_split.c
 +++ b/mz_strm_split.c
 @@ -175,7 +175,7 @@ int32_t mz_stream_split_open(void *stream, const char *path, int32_t mode) {
@@ -119,7 +119,7 @@ index 417de08..0664446 100644
      if (!split->path_cd)
          return MZ_MEM_ERROR;
 diff --git a/mz_zip_rw.c b/mz_zip_rw.c
-index 13bff1f..1f358c9 100644
+index 6c555de..5f3b088 100644
 --- a/mz_zip_rw.c
 +++ b/mz_zip_rw.c
 @@ -677,14 +677,14 @@ int32_t mz_zip_reader_entry_save_file(void *handle, const char *path) {
@@ -139,4 +139,3 @@ index 13bff1f..1f358c9 100644
      if (!directory) {
          err = MZ_MEM_ERROR;
          goto save_cleanup;
-

@@ -25,6 +25,6 @@ target_link_libraries(ysm-gfx
         PUBLIC
         ysm-core
         cglm
-        flatbuffers
         PRIVATE
-        ysm-proto)
+        ysm-proto
+        yalantinglibs)

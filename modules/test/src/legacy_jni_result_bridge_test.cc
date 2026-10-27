@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include <java/opaque_ptr.h>
 #include <legacy/result_bridge.h>
 #include <legacy/result_owner.h>
 
@@ -35,7 +36,7 @@ class FakeJni final {
 
     [[nodiscard]] int calls() const noexcept { return calls_; }
 
-    [[nodiscard]] ResultOwner* transferred_owner() const noexcept {
+    [[nodiscard]] jlong transferred_owner() const noexcept {
         return transferred_owner_;
     }
 
@@ -116,8 +117,7 @@ class FakeJni final {
         static_cast<void>(va_arg(args, jint));
         static_cast<void>(va_arg(args, jstring));
         const auto handle = va_arg(args, jlong);
-        self.transferred_owner_ =
-            reinterpret_cast<ResultOwner*>(static_cast<std::intptr_t>(handle));
+        self.transferred_owner_ = handle;
         return self.Object<jobject>();
     }
 
@@ -133,7 +133,7 @@ class FakeJni final {
     int calls_{};
     std::uintptr_t next_object_{0x1000};
     bool pending_exception_{};
-    ResultOwner* transferred_owner_{};
+    jlong transferred_owner_{};
 };
 
 Payload MakePayload(PayloadKind kind, std::uint32_t logical_id,
@@ -158,8 +158,13 @@ TEST(LegacyJniResultBridgeTest, TransfersOnlyAfterTheCompleteJavaResult) {
     auto result = NewSuccessResult(env.env(), MakeResult());
     ASSERT_TRUE(result.ok()) << result.status();
     ASSERT_NE(result.value(), nullptr);
-    ASSERT_NE(env.transferred_owner(), nullptr);
-    delete env.transferred_owner();
+    ASSERT_NE(env.transferred_owner(), 0);
+    auto retained =
+        ::ysm::java::AcquireOpaquePtr<ResultOwner>(env.transferred_owner());
+    ASSERT_TRUE(retained.ok());
+    EXPECT_EQ(retained->use_count(), 2);
+    ::ysm::java::DestroyOpaquePtr(env.transferred_owner());
+    EXPECT_EQ(retained->use_count(), 1);
 }
 
 TEST(LegacyJniResultBridgeTest,
@@ -168,14 +173,13 @@ TEST(LegacyJniResultBridgeTest,
     auto successful_result = NewSuccessResult(successful.env(), MakeResult());
     ASSERT_TRUE(successful_result.ok()) << successful_result.status();
     const int construction_calls = successful.calls();
-    delete successful.transferred_owner();
+    ::ysm::java::DestroyOpaquePtr(successful.transferred_owner());
 
     for (int fail_call = 1; fail_call <= construction_calls; ++fail_call) {
         FakeJni failing(fail_call);
         auto result = NewSuccessResult(failing.env(), MakeResult());
         EXPECT_FALSE(result.ok()) << "fail call " << fail_call;
-        EXPECT_EQ(failing.transferred_owner(), nullptr)
-            << "fail call " << fail_call;
+        EXPECT_EQ(failing.transferred_owner(), 0) << "fail call " << fail_call;
     }
 }
 }  // namespace

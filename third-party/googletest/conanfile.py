@@ -8,7 +8,7 @@ class GoogleTestConan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     exports_sources = "patches/*", "src/*"
     name = "googletest"
-    version = "1.17.0"
+    version = "1.18.0"
     license = "BSD-3-Clause"
     description = "GoogleTest testing and mocking framework"
     homepage = "https://github.com/google/googletest"
@@ -19,7 +19,7 @@ class GoogleTestConan(ConanFile):
 
     def requirements(self):
         self.requires(
-            "abseil/20260107.1@ysm/stable",
+            "abseil/20260817.0@ysm/stable",
             transitive_headers=True,
             transitive_libs=True,
         )
@@ -41,9 +41,6 @@ class GoogleTestConan(ConanFile):
             "abseil::absl_flags_reflection",
             "abseil::absl_flags_usage",
             "abseil::absl_strings",
-            "abseil::absl_any",
-            "abseil::absl_optional",
-            "abseil::absl_variant",
             "re2::re2",
         ]
         self.cpp_info.components["gtest_main"].requires = ["gtest"]

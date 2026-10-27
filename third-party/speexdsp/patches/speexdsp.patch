@@ -1,0 +1,51 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+new file mode 100644
+index 0000000..0b8d11a
+--- /dev/null
++++ b/CMakeLists.txt
+@@ -0,0 +1,26 @@
++cmake_minimum_required(VERSION 3.20)
++project(speexdsp-resampler VERSION 1.2.1 LANGUAGES C)
++
++add_library(speexdsp-resampler STATIC libspeexdsp/resample.c)
++target_include_directories(speexdsp-resampler
++    PUBLIC
++        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/speex>"
++        "$<INSTALL_INTERFACE:include/speex>"
++    PRIVATE
++        "${CMAKE_CURRENT_SOURCE_DIR}/libspeexdsp"
++)
++target_compile_definitions(speexdsp-resampler
++    PUBLIC OUTSIDE_SPEEX RANDOM_PREFIX=ysm_speex
++    PRIVATE FLOATING_POINT)
++set_target_properties(speexdsp-resampler PROPERTIES
++    OUTPUT_NAME speexdsp-resampler
++    POSITION_INDEPENDENT_CODE ON
++    C_STANDARD 99
++    C_STANDARD_REQUIRED ON)
++
++if(MSVC)
++    target_compile_definitions(speexdsp-resampler PRIVATE
++        _CRT_SECURE_NO_WARNINGS)
++endif()
++
++add_library(SpeexDSP::resampler ALIAS speexdsp-resampler)
+diff --git a/libspeexdsp/resample.c b/libspeexdsp/resample.c
+index 2bfbc1c..5a77180 100644
+--- a/libspeexdsp/resample.c
++++ b/libspeexdsp/resample.c
+@@ -62,10 +62,10 @@
+ #endif
+ 
+ #ifdef OUTSIDE_SPEEX
+-#include <stdlib.h>
+-static void *speex_alloc(int size) {return calloc(size,1);}
+-static void *speex_realloc(void *ptr, int size) {return realloc(ptr, size);}
+-static void speex_free(void *ptr) {free(ptr);}
++#include <mimalloc.h>
++static void *speex_alloc(int size) {return mi_calloc(1, size);}
++static void *speex_realloc(void *ptr, int size) {return mi_realloc(ptr, size);}
++static void speex_free(void *ptr) {mi_free(ptr);}
+ #ifndef EXPORT
+ #define EXPORT
+ #endif
