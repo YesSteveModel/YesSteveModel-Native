@@ -19,6 +19,9 @@ namespace ysm::gfx::renderer {
 class ParallelExecutor
 {
 public:
+    static constexpr size_t kMinimumThreadCount = 2;
+    static constexpr size_t kMaximumThreadCount = 8;
+
     using InitTask = std::function<void(size_t, size_t)>;
     using ActiveScope = std::unique_ptr<ParallelExecutor, void(*)(ParallelExecutor*)>;
 
@@ -107,7 +110,7 @@ public:
 
         // 等待其他 worker
 #ifdef YSM_EXECUTOR_NO_SPIN
-        for (auto v = threadCount; v != 0; v = running_workers_.load(std::memory_order_relaxed))
+        for (auto v = threadCount; v != 0; v = running_workers_.load(std::memory_order_acquire))
         {
             WaitFor(running_workers_, v);
         }
@@ -143,7 +146,9 @@ public:
 private:
     static size_t DetermineThreadCount(const size_t size) noexcept
     {
-        return size < 1 ? 1 : size;
+        return size < kMinimumThreadCount ? kMinimumThreadCount :
+               size > kMaximumThreadCount ? kMaximumThreadCount :
+               size;
     }
 
     void Worker(const size_t idx, const size_t workers, InitTask initTask)

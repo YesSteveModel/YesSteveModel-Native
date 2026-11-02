@@ -1,5 +1,6 @@
 #include "gfx/renderer/render.h"
 
+#include <array>
 #include <utility>
 
 #define YSM_TRANSFORM_USE_APPROXIMATE_RSQRT 1
@@ -23,6 +24,20 @@
 
 namespace ysm::gfx::renderer {
 namespace {
+struct alignas(64) RenderResultWrapper {
+    RenderResult value;
+};
+
+RenderResult MergeRenderResult(RenderResult accumulated, RenderResult current) noexcept {
+    if (accumulated == RenderResult::kStateInvalid || current == RenderResult::kStateInvalid) [[unlikely]] {
+        return RenderResult::kStateInvalid;
+    }
+    if (accumulated == RenderResult::kOutputRejected || current == RenderResult::kOutputRejected) [[unlikely]] {
+        return RenderResult::kOutputRejected;
+    }
+    return RenderResult::kSuccess;
+}
+
 struct WorkerReadyWaiter {
     std::span<const uint8_t> bone_owners;
     std::span<const WorkerReadyFlag> ready_flags;
@@ -128,18 +143,7 @@ absl::Status Render(BufferView vertex_buffer, VertexKind vertex_kind,
         TranslucentBufferType translucent_proxy(
             vertex_consumer, schedule.translucent_vertex_count,
             schedule.translucent_vertex_offset);
-        std::atomic<RenderResult> generation_result = RenderResult::kSuccess;
-        auto record_result = [&](RenderResult current) {
-            if (current == RenderResult::kStateInvalid) [[unlikely]] {
-                generation_result.store(current, std::memory_order_relaxed);
-            } else if (current == RenderResult::kOutputRejected) [[unlikely]] {
-                auto expected = RenderResult::kSuccess;
-                generation_result.compare_exchange_strong(
-                    expected, current, std::memory_order_relaxed);
-            }
-        };
-
-        auto task_func = [&](uint32_t worker_index, uint32_t worker_count) {
+        auto run_worker = [&](uint32_t worker_index, uint32_t worker_count) {
             std::conditional_t<kWorkerReadySpin, WorkerReadyWaiter, NopWaiter>
                 bone_waiter(schedule, state);
 
@@ -148,11 +152,14 @@ absl::Status Render(BufferView vertex_buffer, VertexKind vertex_kind,
                                            worker_count);
                 state.PublishWorkerReady(worker_index);
                 if (current != RenderResult::kSuccess) [[unlikely]] {
-                    record_result(current);
-                    return;
+                    return current;
                 }
             }
 
+            auto worker_result = RenderResult::kSuccess;
+            auto record_result = [&](RenderResult current) {
+                worker_result = MergeRenderResult(worker_result, current);
+            };
             auto& task = schedule.tasks[worker_index];
             // cutout
             if (auto& partition = task.cutout;
@@ -188,8 +195,15 @@ absl::Status Render(BufferView vertex_buffer, VertexKind vertex_kind,
                     tag, translucent_proxy, cubes.translucent_culling, state,
                     partition, parameters, bone_waiter));
             }
+            return worker_result;
         };
 
+        std::array<RenderResultWrapper, ParallelExecutor::kMaximumThreadCount> worker_results;
+        auto task_func = [&](uint32_t worker_index, uint32_t worker_count) {
+            worker_results[worker_index].value = run_worker(worker_index, worker_count);
+        };
+        const auto worker_count = schedule_mode == RenderSchedulingMode::kInline
+            ? size_t{1} : executor.GetThreadCount();
         if (schedule_mode == RenderSchedulingMode::kInline) {
             task_func(0, 1);
         } else {
@@ -197,7 +211,11 @@ absl::Status Render(BufferView vertex_buffer, VertexKind vertex_kind,
             ysm_lfence;
         }
 
-        result = generation_result.load(std::memory_order_relaxed);
+        // Execute acquires worker completion before their result slots are read.
+        result = RenderResult::kSuccess;
+        for (size_t i = 0; i < worker_count; ++i) {
+            result = MergeRenderResult(result, worker_results[i].value);
+        }
         if (result != RenderResult::kSuccess) [[unlikely]] {
             return absl::InternalError("Error updating render bone state");
         }

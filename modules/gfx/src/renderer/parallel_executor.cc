@@ -97,29 +97,22 @@ void ParallelExecutor::WaitFor(std::atomic_size_t &value, size_t v) noexcept {
 
 namespace ysm::gfx::renderer {
 namespace {
-constexpr size_t kMinimumThreadCount = 2;
-constexpr size_t kMaximumThreadCount = 8;
-
-size_t ClampThreadCount(size_t value) noexcept {
-    return std::clamp(value, kMinimumThreadCount, kMaximumThreadCount);
-}
-
 size_t CalculateDesktopThreadCount(const CpuTopology& topology) noexcept {
     if (topology.hybrid) {
         const auto available = topology.performance_core_count > 0
                                    ? topology.performance_core_count - 1
                                    : 0;
-        return ClampThreadCount(available);
+        return available;
     }
     if (topology.has_smt) {
         const auto physical_equivalent = topology.logical_core_count / 2;
         const auto available =
             physical_equivalent > 2 ? physical_equivalent - 2 : 0;
-        return ClampThreadCount(available);
+        return available;
     }
     const auto available = (topology.physical_core_count / 3) * 2 +
                            (topology.physical_core_count % 3) * 2 / 3;
-    return ClampThreadCount(available);
+    return available;
 }
 
 size_t CalculateAndroidThreadCount(
@@ -127,12 +120,12 @@ size_t CalculateAndroidThreadCount(
     const auto third = logical_core_count / 3;
     const auto available =
         third + static_cast<unsigned int>(logical_core_count % 3 != 0);
-    return ClampThreadCount(available);
+    return available;
 }
 
 size_t CalculateFallbackThreadCount(
     unsigned int logical_core_count) noexcept {
-    return ClampThreadCount(logical_core_count / 3);
+    return logical_core_count / 3;
 }
 
 struct ParallelExecutorConfig {

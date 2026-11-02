@@ -11,7 +11,7 @@
 
 namespace ysm::gfx::renderer {
 enum class RenderContext : uint16_t { kLevel, kIrisShadow, kGui };
-enum class RenderResult : int32_t { kStateInvalid = 0, kSuccess = 1, kOutputRejected = 2 };
+enum class RenderResult : uint32_t { kStateInvalid = 0, kSuccess = 1, kOutputRejected = 2 };
 
 struct alignas(64) RenderParameters {
     mat4 model;

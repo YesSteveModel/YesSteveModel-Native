@@ -37,9 +37,24 @@ TEST(ParallelExecutorTest, TreatsRequestedSizeAsTotalWorkerCount) {
     }
 }
 
-TEST(ParallelExecutorTest, ClampsZeroSizeToCallerWorker) {
+TEST(ParallelExecutorTest, ClampsZeroSizeToMinimumThreadCount) {
     ParallelExecutor executor(0);
-    EXPECT_EQ(executor.GetThreadCount(), 1);
+    EXPECT_EQ(executor.GetThreadCount(), ParallelExecutor::kMinimumThreadCount);
+}
+
+TEST(ParallelExecutorTest, PublishesExclusiveResultSlotsAtMaximumThreadCount) {
+    ParallelExecutor executor(ParallelExecutor::kMaximumThreadCount + 1);
+    ASSERT_EQ(executor.GetThreadCount(), ParallelExecutor::kMaximumThreadCount);
+    std::array<size_t, ParallelExecutor::kMaximumThreadCount> results;
+    for (size_t generation = 1; generation <= 100; ++generation) {
+        auto active_scope = executor.BeginActiveScope();
+        executor.Execute([&](size_t index, size_t worker_count) {
+            results[index] = generation * worker_count + index;
+        });
+        for (size_t index = 0; index < results.size(); ++index) {
+            EXPECT_EQ(results[index], generation * results.size() + index);
+        }
+    }
 }
 }  // namespace
 }  // namespace ysm::gfx::renderer::internal
