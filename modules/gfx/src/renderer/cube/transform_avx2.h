@@ -8,6 +8,7 @@
 #include "cpu.h"
 #include "fast_math.h"
 #include "inline.h"
+#include "compiler.h"
 #include "output.h"
 #include "transform_sse41.h"
 
@@ -195,7 +196,9 @@ YSM_TARGET_AVX2 YSM_INLINE uint32_t StoreBackFacesAvx2(
     _mm_storel_epi64(reinterpret_cast<__m128i*>(destination.data()), packed8);
     auto back_face_bits =
         static_cast<uint32_t>(_mm256_movemask_ps(back_face));
+#ifndef YSM_MSVC_FRONTEND
     asm volatile("" : "+r"(back_face_bits));    // 防溢出
+#endif
     return back_face_bits;
 }
 

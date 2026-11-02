@@ -21,6 +21,7 @@
 #else
 #define YSM_TARGET_AVX512
 #define YSM_TARGET_AVX2
+#define YSM_TARGET_SSE41
 #endif
 
 #elif defined(YSM_ARM64)

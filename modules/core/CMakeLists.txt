@@ -59,6 +59,4 @@ endif ()
 if (YSM_LINUX OR YSM_MACOS)
     find_package(Iconv REQUIRED)
     target_link_libraries(ysm-core PRIVATE Iconv::Iconv)
-elseif (YSM_WINDOWS)
-    target_link_libraries(ysm-core PRIVATE synchronization) # TODO: 适配 win7 后要处理
 endif ()
