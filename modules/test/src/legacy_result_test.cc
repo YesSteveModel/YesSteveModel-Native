@@ -73,6 +73,15 @@ TEST(LegacyResultProtocolTest, EncodesExactUnversionedDescriptor) {
                            descriptor->begin() + 28));
 }
 
+TEST(LegacyResultProtocolTest, EncodesDescriptorAboveTheFormerLimit) {
+    auto result = MinimalResult();
+    result.payloads[2].name.assign(16 * 1024 * 1024, 'a');
+
+    const auto descriptor = EncodeDescriptor(result);
+    ASSERT_TRUE(descriptor.ok()) << descriptor.status();
+    EXPECT_EQ(descriptor->size(), 60 + 40 * 3 + result.payloads[2].name.size());
+}
+
 TEST(LegacyResultProtocolTest, AcceptsZtxAndRejectsRgbaImagePayloads) {
     auto result = MinimalResult();
     result.payloads.emplace_back(MakePayload(PayloadKind::kBlobImage,

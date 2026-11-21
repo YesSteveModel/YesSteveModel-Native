@@ -1,3 +1,6 @@
+#include <limits>
+#include <utility>
+
 #include <proxy/proxy.h>
 #include <pystring.h>
 
@@ -19,25 +22,61 @@ namespace ysm::lib::archive {
 namespace {
 PRO_DEF_MEM_DISPATCH(MemList, List);
 PRO_DEF_MEM_DISPATCH(MemGetFile, GetFile);
+PRO_DEF_MEM_DISPATCH(MemMemberNames, MemberNames);
+PRO_DEF_MEM_DISPATCH(MemMemberFacts, MemberFacts);
 
-struct ArchiveFacade : pro::facade_builder
-    ::add_convention<MemList,
-                     absl::StatusOr<jobjectArray>(JNIEnv_* env, jstring path,
-                                                  jint type)>
-    ::add_convention<MemGetFile,
-                     absl::StatusOr<jobject>(JNIEnv_* env, jstring file_name,
-                                             jboolean dry_run)>
-    ::support_destruction<pro::constraint_level::nontrivial>
-    ::build {};
+struct ArchiveFacade
+    : pro::facade_builder::add_convention<
+          MemList,
+          absl::StatusOr<jobjectArray>(JNIEnv_* env, jstring path, jint type)>::
+          add_convention<MemGetFile, absl::StatusOr<jobject>(
+                                         JNIEnv_* env, jstring file_name,
+                                         jboolean dry_run)>::
+              add_convention<MemMemberNames, jobjectArray(JNIEnv_* env)>::
+                  add_convention<MemMemberFacts, jlongArray(JNIEnv_* env)>::
+                      support_destruction<
+                          pro::constraint_level::nontrivial>::build {};
 
 using ArchiveProxy = pro::proxy<ArchiveFacade>;
 
 template <typename ArchiveType>
 struct Wrapper {
-    codec::Archive<ArchiveType, typename ArchiveType::EntryType> archive;  // msvc 连这都推导不出
+    codec::Archive<ArchiveType, typename ArchiveType::EntryType>
+        archive;  // msvc 连这都推导不出
     BufferManaged cache;
 
     explicit Wrapper(const fs::path& path) : archive(path) {}
+
+    jobjectArray MemberNames(JNIEnv_* env) {
+        return java::ObjectArray(
+                   env, java::StrType(env), archive.Entries(),
+                   [](auto env, const auto& entry) -> java::Ref<jstring> {
+                       // NewStringUTF decodes modified UTF-8, which can corrupt archive names.
+                       auto name = U8ToU16(entry.FullName());
+                       if (!name.ok() ||
+                           name->size() >
+                               static_cast<std::size_t>(
+                                   std::numeric_limits<jsize>::max()))
+                           return {};
+                       return java::LocalRef(
+                           env,
+                           env->NewString(
+                               reinterpret_cast<const jchar*>(name->data()),
+                               static_cast<jsize>(name->size())));
+                   })
+            .release();
+    }
+
+    jlongArray MemberFacts(JNIEnv_* env) {
+        std::vector<jlong> facts;
+        facts.reserve(archive.Entries().size() * 3);
+        for (const auto& entry : archive.Entries()) {
+            facts.push_back(static_cast<jlong>(entry.Size()));
+            facts.push_back(entry.Crc().has_value());
+            facts.push_back(entry.Crc().value_or(0));
+        }
+        return java::LongArray<true>(env, facts).release();
+    }
 
     absl::StatusOr<jobjectArray> List(JNIEnv_* env, jstring path_obj,
                                       jint type) {
@@ -82,10 +121,10 @@ struct Wrapper {
                 return file_name_obj;
             }
             YSM_RETURN_IF_ERROR(archive.Extract(entry.value(), cache));
-            YSM_LOG_DEBUG("Extracted archive entry \"{}\": {} bytes",
-                          file_name, cache.size());
-            return env->NewDirectByteBuffer(
-                cache.data(), static_cast<jlong>(cache.size()));
+            YSM_LOG_DEBUG("Extracted archive entry \"{}\": {} bytes", file_name,
+                          cache.size());
+            return env->NewDirectByteBuffer(cache.data(),
+                                            static_cast<jlong>(cache.size()));
         }
         YSM_LOG_DEBUG("Archive entry not found: \"{}\"", file_name);
         return nullptr;
@@ -110,8 +149,7 @@ absl::StatusOr<jlong> Allocate(const fs::path& path) {
 YSM_JNI_ENTRY(
     "Lcom/elfmcys/ysm/natives/NativeArchive;nCreate(Ljava/lang/String;)J",
     (archive_path)) {
-    YSM_ASSERT(archive_path,
-               absl::InvalidArgumentError("path is null"sv));
+    YSM_ASSERT(archive_path, absl::InvalidArgumentError("path is null"sv));
     auto path = java::StrToPath(env, archive_path);
     if (path.has_extension()) {
         auto ext = pystring::lower(PathToU8(path.extension()));
@@ -134,14 +172,29 @@ YSM_JNI_ENTRY(
 }
 
 YSM_JNI_ENTRY(
-    "Lcom/elfmcys/ysm/natives/NativeArchive;nList(JLjava/lang/String;I)[Ljava/lang/String;",
+    "Lcom/elfmcys/ysm/natives/NativeArchive;nMemberNames(J)[Ljava/lang/String;",
+    (ptr)) {
+    YSM_DECLARE_OR_RETURN(archive, java::CastOpaquePtr<ArchiveProxy>(ptr));
+    return (*archive)->MemberNames(env);
+}
+
+YSM_JNI_ENTRY("Lcom/elfmcys/ysm/natives/NativeArchive;nMemberFacts(J)[J",
+              (ptr)) {
+    YSM_DECLARE_OR_RETURN(archive, java::CastOpaquePtr<ArchiveProxy>(ptr));
+    return (*archive)->MemberFacts(env);
+}
+
+YSM_JNI_ENTRY(
+    "Lcom/elfmcys/ysm/natives/NativeArchive;nList(JLjava/lang/String;I)[Ljava/"
+    "lang/String;",
     (ptr, path, type)) {
     YSM_DECLARE_OR_RETURN(archive, java::CastOpaquePtr<ArchiveProxy>(ptr));
     return (*archive)->List(env, path, type);
 }
 
 YSM_JNI_ENTRY(
-    "Lcom/elfmcys/ysm/natives/NativeArchive;nGetFile(JLjava/lang/String;Z)Ljava/lang/Object;",
+    "Lcom/elfmcys/ysm/natives/NativeArchive;nGetFile(JLjava/lang/"
+    "String;Z)Ljava/lang/Object;",
     (ptr, file_name, dry_run)) {
     YSM_DECLARE_OR_RETURN(archive, java::CastOpaquePtr<ArchiveProxy>(ptr));
     return (*archive)->GetFile(env, file_name, dry_run);

@@ -13,7 +13,7 @@ template <typename ValueType>
 class Tree : public NonCopyable {
     static_assert(!std::is_reference_v<ValueType>);
 
-public:
+   public:
     struct Node;
 
     gch::optional_ref<ValueType> operator[](
@@ -29,7 +29,7 @@ public:
 
     Node& root() noexcept { return root_; }
 
-private:
+   private:
     Node root_;
 };
 
@@ -68,6 +68,9 @@ bool Tree<ValueType>::emplace(std::string_view path, ValueType& value) {
             node = &node_iter->second;
         }
         last_path_segment = *iter;
+    }
+    if (node->children.contains(last_path_segment)) {
+        return false;
     }
     return node->values.try_emplace(last_path_segment, std::ref(value)).second;
 }

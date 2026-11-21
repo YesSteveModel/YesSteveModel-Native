@@ -1,0 +1,31 @@
+diff --git a/Source/Lib/Codec/svt_threads.c b/Source/Lib/Codec/svt_threads.c
+index d5dbae1..986ae9d 100644
+--- a/Source/Lib/Codec/svt_threads.c
++++ b/Source/Lib/Codec/svt_threads.c
+@@ -200,17 +200,22 @@ EbHandle svt_create_thread(void* thread_function(void*), void* thread_context, c
+         0, // thread active when created
+         NULL); // new thread ID
+ 
+-    // SetThreadDescription (Windows 10 1607+) — best effort. Older Windows
+-    // returns E_NOTIMPL; nothing else we can do here.
++    // Keep thread naming optional so the loader remains compatible with Windows 7.
+     if (thread_handle && name && *name) {
++        typedef HRESULT(WINAPI * SetThreadDescriptionFn)(HANDLE, PCWSTR);
++        HMODULE kernel = GetModuleHandleW(L"kernel32.dll");
++        SetThreadDescriptionFn set_thread_description = kernel
++            ? (SetThreadDescriptionFn)GetProcAddress(kernel, "SetThreadDescription")
++            : NULL;
+         // Mirror Linux's TASK_COMM_LEN (15 + NUL); MultiByteToWideChar fails if
+         // the source doesn't fit, so truncate first.
+         char    truncated[16];
+         wchar_t wname[16];
+         strncpy(truncated, name, sizeof(truncated) - 1);
+         truncated[sizeof(truncated) - 1] = '\0';
+-        if (MultiByteToWideChar(CP_UTF8, 0, truncated, -1, wname, (int)(sizeof(wname) / sizeof(wname[0]))) > 0) {
+-            (void)SetThreadDescription((HANDLE)thread_handle, wname);
++        if (set_thread_description &&
++            MultiByteToWideChar(CP_UTF8, 0, truncated, -1, wname, (int)(sizeof(wname) / sizeof(wname[0]))) > 0) {
++            (void)set_thread_description((HANDLE)thread_handle, wname);
+         }
+     }
+ 

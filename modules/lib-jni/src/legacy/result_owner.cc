@@ -13,7 +13,8 @@ namespace ysm::legacy::java {
 namespace {
 constexpr std::size_t kHeaderSize = 60;
 constexpr std::size_t kPayloadPrefixSize = 40;
-constexpr std::size_t kMaxDescriptorSize = 16 * 1024 * 1024;
+constexpr std::size_t kMaxDescriptorSize = 256 * 1024 * 1024;
+static_assert(kMaxDescriptorSize <= BufferManaged::kMaxSize);
 constexpr std::size_t kMaxPayloadCount = 32'766;
 constexpr std::uint64_t kMaxSourceSize = 69'206'016;
 constexpr std::uint32_t kMaxImageDimension = 4096;

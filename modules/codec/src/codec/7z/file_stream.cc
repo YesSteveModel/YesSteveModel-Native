@@ -23,8 +23,12 @@ SRes FileStream::Look(const void** buf, size_t* size) noexcept {
     if (buffer_.size() == 0) [[unlikely]] {
         buffer_.resize(kBufferSize);
     }
+    auto offset = stream_.tellg();
     stream_.read(reinterpret_cast<char*>(buffer_.data()),
                  static_cast<std::streamsize>(buffer_.size()));
+    if (trace_ && stream_.gcount() > 0)
+        trace_->reads.push_back({static_cast<uint64_t>(offset),
+                                 static_cast<uint64_t>(stream_.gcount())});
     if (stream_.bad()) [[unlikely]] {
         *size = 0;
         return SZ_ERROR_READ;
@@ -90,8 +94,12 @@ SRes FileStream::Read(void* buf, size_t* size) noexcept {
 
     // 缓存不足以填充完 buf，执行读取
     auto remaining = *size - consumed;
+    auto offset = stream_.tellg();
     stream_.read(static_cast<char*>(buf) + consumed,
                  static_cast<std::streamsize>(remaining));
+    if (trace_ && stream_.gcount() > 0)
+        trace_->reads.push_back({static_cast<uint64_t>(offset),
+                                 static_cast<uint64_t>(stream_.gcount())});
     // IO 错误
     if (stream_.bad()) [[unlikely]] {
         *size = 0;
@@ -138,8 +146,9 @@ SRes FileStream::Seek(Int64* pos, ESzSeek origin) noexcept {
     return SZ_OK;
 }
 
-FileStream::FileStream(const fs::path& path)
-    : vtable_holder_(
+FileStream::FileStream(const fs::path& path, ArchiveTrace* trace)
+    : trace_(trace),
+      vtable_holder_(
           this,
           {
               [](ILookInStreamPtr p, const void** buf, size_t* size) {

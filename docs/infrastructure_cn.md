@@ -11,6 +11,7 @@
 | [`gch::optional_ref` 可空借用](infrastructure/optional-ref_cn.md) | 可空引用、生命周期与访问约束 | 通用依赖 | `gch::optional_ref<T>`、`gch::optional_cref<T>` |
 | [PImpl 与实现依赖隔离](infrastructure/pimpl_cn.md) | inline storage、容量与对齐、特殊成员函数 | `core` | `YSM_PIMPL_DECLARE`、`YSM_PIMPL_CONSTRUCT`、`YSM_PIMPL_DEFINITION` |
 | [通用模板与 RAII](infrastructure/templates-raii_cn.md) | scope guard、枚举分派、位打包与层级树 | `core` | `ScopeGuard`、`EnumCast`、`YSM_BIT_PACK` |
+| [协作取消](infrastructure/cancellation_cn.md) | 单向状态、共享观察与调用期保活 | `core` / JNI 外层 | `CancellationState`、`NativeCancellation` |
 | [宏与编译期设施](infrastructure/macros-compile-time_cn.md) | 日志、profiling、优化、ISA 与可见性 | `core` | `YSM_LOG`、`YSM_PROFILE_ZONE`、`YSM_ASSUME` |
 | [CPU、SIMD](infrastructure/cpu-simd_cn.md) | CPU 探测、SIMD tag | `core` | `InitCpuInfo`、`simd::Tag` |
 | [JNI 基建](infrastructure/jni_cn.md) | 引用、数组、buffer、handle 与 entry 注册 | `java` | `Ref<T>`、`BufferInput`、`YSM_JNI_ENTRY` |

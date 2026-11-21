@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include "c_string_view.h"
 
 namespace ysm::codec {
@@ -7,13 +8,15 @@ class ArchiveEntry {
     std::string full_name_;
     std::pair<uint16_t, uint16_t> file_name_range_;
     size_t size_;
+    std::optional<uint32_t> crc_;
 
    protected:
-    ArchiveEntry(std::string&& full_name, size_t size)
-        : full_name_(full_name.starts_with('/') ? full_name.substr(1)
-                                                : std::move(full_name)),
+    ArchiveEntry(std::string&& full_name, size_t size,
+                 std::optional<uint32_t> crc = std::nullopt)
+        : full_name_(std::move(full_name)),
           file_name_range_(GetFileNameRange()),
-          size_(size) {}
+          size_(size),
+          crc_(crc) {}
 
    public:
     ArchiveEntry(const ArchiveEntry& other) = delete;
@@ -30,6 +33,8 @@ class ArchiveEntry {
     }
 
     [[nodiscard]] size_t Size() const noexcept { return size_; }
+
+    [[nodiscard]] std::optional<uint32_t> Crc() const noexcept { return crc_; }
 
    private:
     std::pair<uint16_t, uint16_t> GetFileNameRange() const {

@@ -56,6 +56,7 @@ target_link_libraries(ysm-lib-jni PRIVATE
         ysm-gfx
         ysm-codec
         ysm-java
+        ysm-storage
         ysm-legacy
         yalantinglibs
         msft_proxy4

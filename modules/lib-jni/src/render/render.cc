@@ -19,8 +19,8 @@ YSM_BIT_PACK(PackedLightAndOverlay, jlong,
 }  // namespace
 
 YSM_JNI_ENTRY(
-    "Lcom/elfmcys/ysm/natives/render/NativeRenderer;nRender(Ljava/lang/Object;IJJIJIJJ)I",
-    (vertex_buffer_obj, vertex_buffer_flag, mat_ptr, model_state_ptr,
+    "Lcom/elfmcys/ysm/natives/render/NativeRenderer;nRender([IJIJJIJIJJ)I",
+    (fallback, vertex_address, byte_capacity, mat_ptr, model_state_ptr,
      vertex_count, light_and_overlay, color, flags, iris_entity_id)) {
     YSM_DECLARE_OR_RETURN(
         model_state,
@@ -31,7 +31,6 @@ YSM_JNI_ENTRY(
     if (vertex_count == 0) {
         return static_cast<jint>(gfx::renderer::RenderResult::kSuccess);
     }
-    YSM_RETURN_IF_NULL(vertex_buffer_obj);
     YSM_ASSERT(mat_ptr != 0,
                absl::InvalidArgumentError("Render matrices are null."));
     const auto* mat =
@@ -43,14 +42,16 @@ YSM_JNI_ENTRY(
     BufferView vertex_buffer;
     // ReSharper disable once CppTooWideScope
     java::CriticalIntArray<false> vertex_buffer_array;
-    if (vertex_buffer_flag > 0) {
-        YSM_ASSIGN_OR_RETURN(
-            vertex_buffer, java::GetDirectBuffer(env, vertex_buffer_obj));
+    if (fallback == nullptr) {
+        // The host reserved this range and retains its backing until all workers return.
+        vertex_buffer = {
+            reinterpret_cast<Byte*>(static_cast<uintptr_t>(vertex_address)),
+            static_cast<size_t>(byte_capacity)};
     } else {
         YSM_ASSIGN_OR_RETURN(
             vertex_buffer_array,
             java::CriticalIntArray<false>::Get(
-                env, reinterpret_cast<jintArray>(vertex_buffer_obj)));
+                env, fallback));
         vertex_buffer = {
             reinterpret_cast<Byte*>(vertex_buffer_array.data()),
             vertex_buffer_array.size() * 4};

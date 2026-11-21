@@ -5,6 +5,7 @@
 #include <string>
 
 #include "archive_entry.h"
+#include "archive_trace.h"
 #include "buffer_managed.h"
 #include "c_string_view.h"
 #include "err.h"
@@ -20,15 +21,16 @@ class SevenZip {
 
         friend class Impl;
 
-        Entry(std::string&& full_name, size_t size, uint32_t file_index)
-            : ArchiveEntry(std::move(full_name), size),
+        Entry(std::string&& full_name, size_t size, uint32_t file_index,
+              std::optional<uint32_t> crc)
+            : ArchiveEntry(std::move(full_name), size, crc),
               file_index_(file_index) {}
     };
 
     using EntryType = Entry;
 
     explicit SevenZip(BufferViewR zip_buffer);
-    explicit SevenZip(const fs::path& path);
+    explicit SevenZip(const fs::path& path, ArchiveTrace* trace = nullptr);
     ~SevenZip();
 
     absl::Status Ok() const;

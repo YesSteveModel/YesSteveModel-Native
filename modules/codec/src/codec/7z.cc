@@ -6,11 +6,11 @@
 #include <mutex>
 #include <variant>
 
-#include "string_cvt.h"
 #include "7z/file_stream.h"
 #include "7z/mem_stream.h"
 #include "err.h"
 #include "non_copyable.h"
+#include "string_cvt.h"
 
 namespace ysm::codec {
 using namespace sevenzip;
@@ -45,11 +45,13 @@ class SevenZip::Impl {
     ILookInStreamPtr vtable_;
     mutable Catalog catalog_;
     bool ok_ = false;
+    ArchiveTrace* trace_ = nullptr;
 
    public:
-    explicit Impl(fs::path path)
-        : stream_(std::in_place_type<FileStream>, std::move(path)),
-          vtable_(std::get<FileStream>(stream_).vtable()) {
+    explicit Impl(fs::path path, ArchiveTrace* trace)
+        : stream_(std::in_place_type<FileStream>, std::move(path), trace),
+          vtable_(std::get<FileStream>(stream_).vtable()),
+          trace_(trace) {
         Open();
     }
 
@@ -68,7 +70,7 @@ class SevenZip::Impl {
     }
 
     [[nodiscard]] absl::Status VisitEntries(
-        absl::FunctionRef<void(Entry&&)> visitor) const noexcept {
+        absl::FunctionRef<void(Entry&&)> visitor) const {
         YSM_ASSERT(ok_, Ok());
         std::u16string str;
         auto db = &catalog_.db;
@@ -78,25 +80,29 @@ class SevenZip::Impl {
                 continue;
 
             size_t len = SzArEx_GetFileNameUtf16(db, i, nullptr);
-            if (len < 1) [[unlikely]]
-                continue;
+            YSM_ASSERT(len > 1,
+                       absl::DataLossError("Invalid 7z member name"sv));
 
             str.resize(len);
-            if (1 > SzArEx_GetFileNameUtf16(
-                        db, i, reinterpret_cast<UInt16*>(str.data())))
-                [[unlikely]]
-                continue;
+            YSM_ASSERT(SzArEx_GetFileNameUtf16(
+                           db, i, reinterpret_cast<UInt16*>(str.data())) == len,
+                       absl::DataLossError("Invalid 7z member name"sv));
             str.resize(len - 1);
 
-            auto file_name = U16ToU8(str);
+            YSM_DECLARE_OR_RETURN(file_name, U16ToU8(str));
             auto file_size = SzArEx_GetFileSize(db, i);
-            visitor(Entry(std::move(file_name), file_size, i));
+            auto crc = SzBitWithVals_Check(&db->CRCs, i)
+                           ? std::optional<uint32_t>(db->CRCs.Vals[i])
+                           : std::nullopt;
+            visitor(Entry(std::move(file_name), file_size, i, crc));
         }
         return OkStatus();
     }
 
     absl::Status DecompressTo(const Entry& entry, BufferManaged& buffer) const {
         YSM_ASSERT(ok_, Ok());
+        if (trace_)
+            ++trace_->extracts;
         if (entry.Size() == 0) {
             buffer.resize(0);
             return OkStatus();
@@ -138,6 +144,8 @@ class SevenZip::Impl {
     void Open() {
         auto db = &catalog_.db;
         CheckInit();
+        if (trace_)
+            ++trace_->directories;
         if (SzArEx_Open(db, vtable_, &kAllocator, &kAllocator) != SZ_OK)
             [[unlikely]] {
             return;
@@ -152,7 +160,8 @@ YSM_PIMPL_DEFINITION(SevenZip)
 SevenZip::SevenZip(BufferViewR seven_zip_buffer)
     : YSM_PIMPL_CONSTRUCT(seven_zip_buffer) {}
 
-SevenZip::SevenZip(const fs::path& path) : YSM_PIMPL_CONSTRUCT(path) {}
+SevenZip::SevenZip(const fs::path& path, ArchiveTrace* trace)
+    : YSM_PIMPL_CONSTRUCT(path, trace) {}
 
 SevenZip::~SevenZip() = default;
 
@@ -167,6 +176,9 @@ absl::Status SevenZip::Visit(absl::FunctionRef<void(Entry&&)> visitor) const {
 absl::Status SevenZip::Extract(const Entry& entry,
                                BufferManaged& buffer) const {
     YSM_RETURN_IF_ERROR(Pimpl().DecompressTo(entry, buffer));
+    YSM_ASSERT(
+        !entry.Crc() || CrcCalc(buffer.data(), buffer.size()) == *entry.Crc(),
+        absl::DataLossError("Invalid 7z member checksum"sv));
     return OkStatus();
 }
 }  // namespace ysm::codec

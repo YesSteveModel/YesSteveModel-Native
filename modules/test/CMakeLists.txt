@@ -10,6 +10,7 @@ target_include_directories(ysm-test PRIVATE
 target_compile_definitions(ysm-test PRIVATE
         YSM_ENABLE_DEBUG_LOG=1
         ABSL_MAX_VLOG_VERBOSITY=2
+        YSM_TEST_STORAGE_DEBUG_LOG=$<BOOL:${YSM_ENABLE_DEBUG_LOG}>
 )
 target_link_libraries(ysm-test PRIVATE
         ysm-proto
@@ -17,6 +18,8 @@ target_link_libraries(ysm-test PRIVATE
         ysm-gfx-internal
         ysm-codec
         ysm-java
+        ysm-storage
+        SQLiteCpp::SQLite3
         ysm-legacy
         ysm-legacy-jni
         yalantinglibs

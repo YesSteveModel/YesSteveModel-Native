@@ -3,5 +3,5 @@
 #include <c_string_view.h>
 
 namespace ysm::lib::runtime {
-inline constexpr auto kNativeAbi = "0.1.0-unstable"_sv;
+inline constexpr auto kNativeAbi = "0.1.1-unstable"_sv;
 }

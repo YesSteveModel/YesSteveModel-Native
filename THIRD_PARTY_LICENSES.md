@@ -38,7 +38,10 @@ pinned sources in `third-party/*/conandata.yml`.
 | [libvorbis](https://github.com/xiph/vorbis) | v1.3.7 | BSD-3-Clause | Decoder core only; `libvorbisfile` and the encoder interface are not packaged. |
 | [Proxy](https://github.com/ngcpp/proxy) | 4.1.0 | MIT |  |
 | [pystring](https://github.com/imageworks/pystring) | v1.2.0 | BSD-3-Clause |  |
+| [simdutf](https://github.com/simdutf/simdutf) | v9.4.0 | Apache-2.0 OR MIT | The package includes both upstream license texts. |
 | [SpeexDSP](https://gitlab.xiph.org/xiph/speexdsp) | SpeexDSP-1.2.1 | BSD-3-Clause | Float resampler subset only. |
+| [SQLite](https://sqlite.org) | 3.53.4 bundled in SQLiteCpp | [LicenseRef-SQLite-Public-Domain](third-party/sqlitecpp/licenses/SQLite-Public-Domain.txt) | Private static build from the pinned SQLiteCpp commit; no separate download. The package includes the public-domain notice. |
+| [SQLiteCpp](https://github.com/SRombauts/SQLiteCpp) | df0a28ca9733f687ab7ce77f070c0df84368a45e (3.4.0) | MIT | Uses bundled SQLite with extension loading disabled; the package includes upstream LICENSE.txt. |
 | [Tracy](https://github.com/wolfpld/tracy) | v0.14.1 | BSD-3-Clause AND BSD-2-Clause AND MIT | Includes LZ4 and concurrentqueue (BSD-2-Clause), and SPSCQueue (MIT). The mimalloc patch disables rpmalloc. |
 | [yalantinglibs](https://github.com/alibaba/yalantinglibs) | 0.6.1 | Apache-2.0 | Upstream also provides a [NOTICE](https://github.com/alibaba/yalantinglibs/blob/8c1f2ea927a5a879046067a686599f825a370858/NOTICE). |
 | [zlib-ng](https://github.com/zlib-ng/zlib-ng) | 2.3.3 | Zlib |  |
@@ -69,7 +72,7 @@ pinned sources in `third-party/*/conandata.yml`.
 
 ## Exclusions
 
-This inventory excludes build tools, compilers, C and C++ runtimes, Iconv,
+This inventory excludes build tools, compilers, C and C++ runtimes,
 Windows synchronization libraries, operating-system frameworks, and other
 system-provided components. Their terms are determined by the build and target
 environments rather than the dependency recipes in this repository.

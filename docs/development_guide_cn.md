@@ -17,7 +17,8 @@
 - 项目定义的所有 C++ 符号必须位于 `ysm` 或其子命名空间中。
 - `std::string` 中的文本统一使用 UTF-8；仅为减少拷贝、提高性能而保留系统编码时，变量名必须显式包含 `native` 标识，以区别于 UTF-8 文本。
 - 使用 `std::string_view` 或 `CStringView` 表示字符串借用，避免使用 `const std::string&`、`const char[]` 或 `const char*`。
-- 字符串字面量使用 `_sv` 后缀声明；该后缀定义于 `<c_string_view.h>`，位于 `ysm` 命名空间。
+- 字符串常量应使用 `constexpr CStringView` 定义。
+- 若字符串字面量的接收类型不是 `const char*`，应使用自定义字面量后缀 `_sv`；该后缀定义于 `<c_string_view.h>`，位于 `ysm` 命名空间。
 - 以函数式、声明式组合为主。仅在需要封装所有权、生命周期、持续状态、不变量或行为契约时引入 class。
 - 尽量避免虚函数；编译期多态使用重载、模板和 CRTP 等模式，运行时多态使用 Microsoft Proxy。
 - 禁止 `dynamic_cast`；允许 `std::any_cast`。
@@ -63,6 +64,7 @@ CMake target 按 `ysm-<module>` 命名。
 | `gfx` | 模型烘焙、缓存、姿态、渲染状态和顶点输出。 |
 | `codec` | 哈希、编码、压缩、图片、归档及音频解码。 |
 | `java` | JNI 引用、数据转换、handle 和 native entry 注册。 |
+| `storage` | 区域 allocator、Catalog、Remote、Bake、PlayerData 业务能力及 CACHE 根消费者协调；私有实现持有 SQLite 连接、schema 和复用语句，不裁决模型权限或业务资格。 |
 | `legacy` | 旧版模型容器的解码与转换。 |
 | `lib-jni` | 组装 Java native ABI 和旧版入口。 |
 | `test` | 行为测试；启用 `BUILD_TESTING` 时构建。 |
@@ -79,6 +81,14 @@ CMake target 按 `ysm-<module>` 命名。
 | macOS arm64 | Apple M1（接近 `armv8.5-a`） | macOS 14.5 |
 
 更高 ISA 只能位于隔离函数中，并在 `InitCpuInfo()` 后通过 runtime feature dispatch 选择；不得进入通用函数、静态初始化或未分派的 inline 路径。
+
+## Java 符号依赖
+
+- 除 JNI entry 声明、描述符和注册绑定所需的符号外，C++ 项目应避免显式依赖 Java 类、字段、构造器和方法符号，包括 JDK 类型。该原则覆盖符号名称、签名的硬编码、查找、缓存及调用；entry 函数体不因属于入口而豁免。
+- JNI 自身提供的 string、array、direct buffer 操作不属于上述依赖。该例外不包括调用这些载体的 Java 方法，也不允许借对象数组引入 Java 业务对象的构造或字段访问。
+- Java 对象构造、字段解释与方法组合应留在 Java。跨边界数据优先使用 JNI 原生载体；复杂结果由 native owner 持有，Java 构造包装或视图并闭合借用与释放责任。
+
+该原则减少 native 对 Java 实现结构和符号查找的耦合；JNI 注册仍显式声明双方约定的入口。
 
 ## ABI、符号与生命周期
 

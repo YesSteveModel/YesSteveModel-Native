@@ -8,9 +8,9 @@
 #include <cryptopp/md5.h>
 #include <cryptopp/modes.h>
 
-#include "codec/zlib.h"
-#include "codec/java_random.h"
 #include "codec/base64.h"
+#include "codec/java_random.h"
+#include "codec/zlib.h"
 
 namespace ysm::legacy::bundle {
 namespace {
@@ -180,15 +180,18 @@ absl::Status LegacyBundle::Visit(
         size_t file_size;
         if (ver2_) {
             YSM_ASSIGN_OR_RETURN(file_name, ReadBase64String(buf));
+            YSM_ASSERT_BUF_SIZE(buf, 8);
             file_size = ReadUint32(buf);
             YSM_ASSERT_BUF_SIZE(buf, 4);
             auto password_size = ReadUint32(buf.subspan(0));
-            segment_size = password_size + 4 + 16 + file_size;
+            segment_size = size_t{password_size} + 4 + 16 + file_size;
         } else {
             YSM_ASSIGN_OR_RETURN(file_name, ReadString(buf));
+            YSM_ASSERT_BUF_SIZE(buf, 4);
             file_size = ReadUint32(buf);
             segment_size = 16 + 16 + file_size;
         }
+        YSM_ASSERT_BUF_SIZE(buf, segment_size);
         visitor(
             Entry(std::move(file_name), file_size, Consume(buf, segment_size)));
     }

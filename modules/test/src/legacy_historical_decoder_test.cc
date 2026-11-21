@@ -303,8 +303,11 @@ void WriteLegacyInfo(FixtureWriter& writer, std::uint32_t version) {
 
 void WriteLegacy(FixtureWriter& writer, std::uint32_t version,
                  std::string_view hash, bool v5_face, std::string_view parent,
-                 bool nonfinite) {
-    writer.VarU32(0);  // features
+                 bool nonfinite, std::uint32_t feature_count = 0) {
+    writer.VarU32(feature_count);
+    for (std::uint32_t i = 0; i < feature_count; ++i) {
+        writer.VarU32(1);
+    }
     writer.VarU32(2);  // geos
     for (const auto [type, name] : {std::pair{1U, std::string_view("main")},
                                     std::pair{2U, std::string_view("arm")}}) {
@@ -809,7 +812,7 @@ TEST(LegacyHistoricalDecoderTest,
     ExpectFailure(truncated, absl::StatusCode::kDataLoss);
 }
 
-TEST(LegacyHistoricalDecoderTest, RejectsUnsupportedVersionAndBudgets) {
+TEST(LegacyHistoricalDecoderTest, RejectsUnsupportedVersion) {
     FixtureWriter zero;
     zero.FixedU32(0);
     ExpectFailure(std::move(zero).Finish(), absl::StatusCode::kUnimplemented);
@@ -818,12 +821,14 @@ TEST(LegacyHistoricalDecoderTest, RejectsUnsupportedVersionAndBudgets) {
     unsupported.FixedU32(33);
     ExpectFailure(std::move(unsupported).Finish(),
                   absl::StatusCode::kUnimplemented);
+}
 
-    FixtureWriter oversized;
-    oversized.FixedU32(1);
-    oversized.VarU32(1'048'577);  // feature collection
-    ExpectFailure(std::move(oversized).Finish(),
-                  absl::StatusCode::kResourceExhausted);
+TEST(LegacyHistoricalDecoderTest, ReadsCollectionsAboveTheFormerLimit) {
+    FixtureWriter writer;
+    writer.FixedU32(1);
+    WriteLegacy(writer, 1, kModelHash, false, {}, false, 1'048'577);
+    const auto model = Decode(std::move(writer).Finish());
+    ASSERT_TRUE(model.ok()) << model.status();
 }
 
 TEST(LegacyHistoricalDecoderTest, RejectsInvalidTagsEnumsAndDuplicateKeys) {
@@ -965,8 +970,7 @@ TEST(LegacyHistoricalDecoderTest,
               (std::vector<std::string>{"minecraft:arrow", "minecraft:arrow"}));
     EXPECT_EQ(
         manifest.info.properties.model_id,
-        std::string(reinterpret_cast<const char*>(decoded->model_id.data()),
-                    decoded->model_id.size()));
+        "hash:000102030405060708090a0b0c0d0e0f00000000000000000000000000000000");
     ASSERT_TRUE(manifest.info.icon_source.has_value());
     EXPECT_EQ(*manifest.info.icon_source,
               proto::manifest::info::PreviewSource::kRaw);

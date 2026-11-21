@@ -1,0 +1,27 @@
+sources:
+  "3.4.0":
+    url: https://github.com/SRombauts/SQLiteCpp.git
+    commit: df0a28ca9733f687ab7ce77f070c0df84368a45e
+patches:
+  "3.4.0":
+    - patch_file: patches/private-sqlite.patch
+build:
+  options:
+    BUILD_SHARED_LIBS: false
+    SQLITECPP_INTERNAL_SQLITE: true
+    SQLITECPP_FIND_SQLITE: false
+    SQLITECPP_BUILD_TESTS: false
+    SQLITECPP_BUILD_EXAMPLES: false
+    SQLITE_ENABLE_COLUMN_METADATA: false
+    SQLITE_OMIT_LOAD_EXTENSION: true
+    SQLITECPP_INCLUDE_SCRIPT: false
+  install: true
+package:
+  cmake_file_name: SQLiteCpp
+  components:
+    sqlite3:
+      target: SQLiteCpp::SQLite3
+      libs: [sqlite3]
+    wrapper:
+      target: SQLiteCpp::SQLiteCpp
+      libs: [SQLiteCpp]

@@ -1015,9 +1015,12 @@ absl::StatusOr<info_proto::Info> ProjectInfo(container::LegacyModel& model,
             "Historical author avatar has no target author occurrence");
     }
 
-    result.properties.model_id.assign(
-        reinterpret_cast<const char*>(model.model_id.data()),
-        model.model_id.size());
+    constexpr std::string_view kHex = "0123456789abcdef";
+    result.properties.model_id = "hash:";
+    for (const auto byte : model.model_id) {
+        result.properties.model_id += kHex[byte >> 4];
+        result.properties.model_id += kHex[byte & 0x0f];
+    }
     result.properties.free = model.info.properties.free;
     result.properties.origin_ver = std::to_string(model.info.origin_version);
     if (model.export_info) {

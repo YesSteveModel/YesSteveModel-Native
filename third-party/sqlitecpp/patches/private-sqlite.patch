@@ -1,0 +1,17 @@
+diff --git a/sqlite3/CMakeLists.txt b/sqlite3/CMakeLists.txt
+index b35335e..4c076b5 100644
+--- a/sqlite3/CMakeLists.txt
++++ b/sqlite3/CMakeLists.txt
+@@ -19,6 +19,12 @@ endif()
+ 
+ add_library(SQLite::SQLite3 ALIAS sqlite3)
+ 
++# Storage installs its private mimalloc callbacks before the first SQLite call.
++target_compile_definitions(sqlite3 PRIVATE
++    SQLITE_THREADSAFE=1 SQLITE_ZERO_MALLOC=1
++    SQLITE_DQS=0 SQLITE_DEFAULT_MEMSTATUS=0 SQLITE_WIN32_WINNT=0x0601)
++set_target_properties(sqlite3 PROPERTIES POSITION_INDEPENDENT_CODE ON)
++
+ target_include_directories(sqlite3
+   PUBLIC
+     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>

@@ -36,7 +36,10 @@ target_link_libraries(ysm-core PUBLIC
         absl::log
         absl::time
 )
-target_link_libraries(ysm-core PRIVATE absl::function_ref)
+target_link_libraries(ysm-core PRIVATE
+        absl::function_ref
+        absl::strings
+        simdutf::simdutf)
 
 # tracy
 if (YSM_ENABLE_TRACY)
@@ -53,10 +56,4 @@ if (YSM_ENABLE_TRACY)
             TRACY_NO_FRAME_IMAGE
             TRACY_NO_SYSTEM_TRACING
             TRACY_NO_CRASH_HANDLER)
-endif ()
-
-# system
-if (YSM_LINUX OR YSM_MACOS)
-    find_package(Iconv REQUIRED)
-    target_link_libraries(ysm-core PRIVATE Iconv::Iconv)
 endif ()

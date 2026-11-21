@@ -1,0 +1,17 @@
+sources:
+  "9.4.0":
+    url: https://github.com/simdutf/simdutf.git
+    tag: v9.4.0
+build:
+  options:
+    BUILD_SHARED_LIBS: false
+    SIMDUTF_CXX_STANDARD: 23
+    SIMDUTF_TESTS: false
+    SIMDUTF_BENCHMARKS: false
+    SIMDUTF_TOOLS: false
+    SIMDUTF_ICONV: false
+    SIMDUTF_FUZZERS: false
+    SIMDUTF_ALWAYS_INCLUDE_FALLBACK: true
+package:
+  cmake_target_name: simdutf::simdutf
+  libs: [simdutf]

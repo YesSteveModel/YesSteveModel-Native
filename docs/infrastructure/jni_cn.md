@@ -6,6 +6,8 @@
 
 JNI 边界依赖 `ysm-java`。
 
+JNI 胶合遵循[Java 符号依赖原则](../development_guide_cn.md#java-符号依赖)。除 entry 声明、描述符和注册绑定外，native 不查找或调用 Java 类、字段、构造器和方法。JNI 自带的 string、array 和 direct buffer 操作可用于交付载体。
+
 ## 引用、字符串与 class
 
 | 入口 | 契约 |
@@ -96,7 +98,19 @@ public final class NativeCopyExample {
 
 每个 create/share 必须对应一次 `DestroyOpaquePtr`。异步工作在 handle 销毁前调用 `AcquireOpaquePtr`；handle 不提供 `T` 的线程安全性。
 
+通用取消使用 [core 取消状态](cancellation_cn.md)。Java `NativeCancellation.borrow` 保护原 handle 的读取窗口；entry 在窗口内获取共享保留。关闭等待 Java 借用结束，不等待已经独立保留状态的 native 消费者。
+
 `CastOpaquePtr<T>` 的结果是 `StatusOr<reference_wrapper<shared_ptr<T>>>`，用 `YSM_DECLARE_OR_RETURN` 解包后借用 handle 内的 shared pointer；显式拷贝或 `AcquireOpaquePtr<T>` 才取得独立副本。
+
+### 存储业务对象与结果
+
+`PlayerData`、`CatalogIndex` 和 `RemoteCacheIndex` 提供业务操作及完整值；公开声明不依赖 SQLite。Java owner 串行化同一对象的调用和关闭，native 私有实现拥有连接与复用语句。通用取消借用覆盖同步 entry；协调器恢复与释放使用独立的无取消上下文。
+
+无载荷终态与 usage 单值通过 `long[]` 交付。前四项为 outcome、稳定失败类别、真实提交事实与值数量；usage 命中时第五项为 UTC 秒。Native 在业务变更前建立终态数组。
+
+打开操作与复杂完整值返回独立结果 handle。Native 在执行前建立结果 owner，尚未返回的 handle 由 RAII 回收。Java 立即采用 handle，读取结果头与具名业务字段，复制完整值后关闭结果。结果不保留活动 cursor，也不借用下次调用会覆盖的 scratch。
+
+打开结果先保留业务对象。`nTakeOwner` 只交付一次独立 typed handle；Java 构造失败通过 adoption 释放该 handle。关闭结果不会释放已经转交的业务 handle。提取失败、JNI fallback 和构造失败属于交付失败，不能证明写入未提交。SQLite 扩展码与原始诊断只进入 native 日志，不进入 Java 结果。
 
 ## Native entry 注册
 

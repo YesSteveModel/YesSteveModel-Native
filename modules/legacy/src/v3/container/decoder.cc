@@ -4,6 +4,7 @@
 #include <bit>
 #include <cstddef>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <string_view>
 #include <unordered_set>
@@ -22,7 +23,6 @@ namespace {
 constexpr std::uint32_t kStringByteLimit = 16 * 1024 * 1024;
 constexpr std::uint32_t kNonSoundByteLimit = 66 * 1024 * 1024;
 constexpr std::uint32_t kSoundByteLimit = 4 * 1024 * 1024;
-constexpr std::uint32_t kCollectionEntryLimit = 1'048'576;
 constexpr std::uint32_t kBoneLimit = 65'536;
 constexpr std::uint32_t kCubeFaceLimit = 6;
 
@@ -40,10 +40,6 @@ constexpr std::uint32_t kCubeFaceLimit = 6;
     return context.Fail(absl::FailedPreconditionError(__VA_ARGS__))
 #define YSM_LEGACY_UNSUPPORTED(...) \
     return context.Fail(absl::UnimplementedError(__VA_ARGS__))
-
-struct Budget {
-    std::uint32_t collection_entries{};
-};
 
 template <typename ReaderType>
 struct Context {
@@ -63,7 +59,6 @@ struct Context {
     }
 
     ReaderType& reader;
-    Budget budget;
     std::uint32_t version{};
     std::uint32_t sound_field_count{};
     std::uint32_t omitted_sound_count{};
@@ -248,26 +243,16 @@ bool ReadBytes(auto& context, BufferManaged& value, std::uint32_t limit,
     return true;
 }
 
-bool ReadCount(auto& context, std::uint32_t& count,
-               std::uint32_t field_limit = kCollectionEntryLimit) {
+template <typename Value, typename ReadValue>
+bool ReadVector(
+    auto& context, std::vector<Value>& values, ReadValue read_value,
+    std::uint32_t field_limit = (std::numeric_limits<std::uint32_t>::max)()) {
+    std::uint32_t count{};
     YSM_LEGACY_TRY(ReadVarU32(context, count));
     if (count > field_limit) {
         YSM_LEGACY_RESOURCE_LIMIT(
             "Historical collection exceeds its field limit");
     }
-    if (count > kCollectionEntryLimit - context.budget.collection_entries) {
-        YSM_LEGACY_RESOURCE_LIMIT(
-            "Historical collection aggregate exceeds its limit");
-    }
-    context.budget.collection_entries += count;
-    return true;
-}
-
-template <typename Value, typename ReadValue>
-bool ReadVector(auto& context, std::vector<Value>& values, ReadValue read_value,
-                std::uint32_t field_limit = kCollectionEntryLimit) {
-    std::uint32_t count{};
-    YSM_LEGACY_TRY(ReadCount(context, count, field_limit));
     values.clear();
     for (std::uint32_t index = 0; index < count; ++index) {
         Value value;
@@ -282,7 +267,7 @@ template <typename Key, typename Value, typename KeyReader,
 bool ReadMap(auto& context, OrderedMap<Key, Value>& values, KeyReader read_key,
              ValueReader read_value) {
     std::uint32_t count{};
-    YSM_LEGACY_TRY(ReadCount(context, count));
+    YSM_LEGACY_TRY(ReadVarU32(context, count));
     values.clear();
     std::unordered_set<Key> keys;
     for (std::uint32_t index = 0; index < count; ++index) {
@@ -801,7 +786,7 @@ bool ReadCommonSoundMap(
     auto& context,
     OrderedMap<std::string, WithSourceHash<LegacySound>>& values) {
     std::uint32_t count{};
-    YSM_LEGACY_TRY(ReadCount(context, count));
+    YSM_LEGACY_TRY(ReadVarU32(context, count));
     values.clear();
     std::unordered_set<std::string> keys;
     for (std::uint32_t index = 0; index < count; ++index) {
@@ -825,7 +810,7 @@ bool ReadCommonSoundMap(
 bool ReadLegacySoundMap(auto& context,
                         OrderedMap<std::string, LegacySound>& values) {
     std::uint32_t count{};
-    YSM_LEGACY_TRY(ReadCount(context, count));
+    YSM_LEGACY_TRY(ReadVarU32(context, count));
     values.clear();
     std::unordered_set<std::string> keys;
     for (std::uint32_t index = 0; index < count; ++index) {

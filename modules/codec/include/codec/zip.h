@@ -3,7 +3,9 @@
 #include <absl/functional/function_ref.h>
 #include <optional>
 
+#include <memory>
 #include "archive_entry.h"
+#include "archive_trace.h"
 #include "buffer.h"
 #include "err.h"
 #include "fs.h"
@@ -15,6 +17,13 @@ class Zip {
     bool stream_open_ = false;
     bool zip_open_ = false;
     std::optional<std::string> file_;
+    struct TraceStream;
+    std::unique_ptr<TraceStream> trace_stream_;
+    ArchiveTrace* trace_ = nullptr;
+    BufferManaged directory_;
+    void* directory_stream_ = nullptr;
+    int64_t directory_offset_ = 0;
+    uint64_t member_count_ = 0;
 
    public:
     class Entry : public ArchiveEntry {
@@ -25,7 +34,8 @@ class Zip {
 
         Entry(std::string&& full_name, size_t size, uint64_t crc32,
               int64_t offset)
-            : ArchiveEntry(std::move(full_name), size),
+            : ArchiveEntry(std::move(full_name), size,
+                           static_cast<uint32_t>(crc32)),
               crc32_(crc32),
               offset_(offset) {}
     };
@@ -34,7 +44,7 @@ class Zip {
 
     explicit Zip(BufferViewR zip_buffer);
 
-    explicit Zip(const fs::path& path);
+    explicit Zip(const fs::path& path, ArchiveTrace* trace = nullptr);
 
     Zip(const Zip& other);
 
@@ -52,5 +62,6 @@ class Zip {
 
    private:
     void Open();
+    bool ReadDirectory(void* stream);
 };
 }  // namespace ysm::codec

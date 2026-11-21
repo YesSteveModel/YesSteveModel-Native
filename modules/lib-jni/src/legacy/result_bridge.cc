@@ -2,16 +2,16 @@
 
 #include <absl/status/status.h>
 
-#include <cstdint>
 #include <limits>
 #include <memory>
-#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include <java/opaque_ptr.h>
 #include <java/ref.h>
 #include <scope_guard.h>
+#include <string_cvt.h>
 
 #include "result_owner.h"
 
@@ -26,68 +26,10 @@ absl::Status PendingException() {
     return absl::InternalError("JVM rejected legacy result construction");
 }
 
-bool IsContinuation(Byte value) noexcept {
-    return (value & 0xC0U) == 0x80U;
-}
-
-std::optional<std::u16string> DecodeUtf8(std::string_view value) {
-    std::u16string output;
-    output.reserve(value.size());
-    const auto* bytes = reinterpret_cast<const Byte*>(value.data());
-    std::size_t offset = 0;
-    while (offset < value.size()) {
-        const Byte first = bytes[offset++];
-        std::uint32_t code_point{};
-        if (first <= 0x7FU) {
-            code_point = first;
-        } else if (first >= 0xC2U && first <= 0xDFU) {
-            if (offset >= value.size() || !IsContinuation(bytes[offset])) {
-                return std::nullopt;
-            }
-            code_point = (first & 0x1FU) << 6U | (bytes[offset++] & 0x3FU);
-        } else if (first >= 0xE0U && first <= 0xEFU) {
-            if (offset + 1 >= value.size() || !IsContinuation(bytes[offset]) ||
-                !IsContinuation(bytes[offset + 1]) ||
-                (first == 0xE0U && bytes[offset] < 0xA0U) ||
-                (first == 0xEDU && bytes[offset] >= 0xA0U)) {
-                return std::nullopt;
-            }
-            code_point = (first & 0x0FU) << 12U |
-                         (bytes[offset] & 0x3FU) << 6U |
-                         (bytes[offset + 1] & 0x3FU);
-            offset += 2;
-        } else if (first >= 0xF0U && first <= 0xF4U) {
-            if (offset + 2 >= value.size() || !IsContinuation(bytes[offset]) ||
-                !IsContinuation(bytes[offset + 1]) ||
-                !IsContinuation(bytes[offset + 2]) ||
-                (first == 0xF0U && bytes[offset] < 0x90U) ||
-                (first == 0xF4U && bytes[offset] >= 0x90U)) {
-                return std::nullopt;
-            }
-            code_point =
-                (first & 0x07U) << 18U | (bytes[offset] & 0x3FU) << 12U |
-                (bytes[offset + 1] & 0x3FU) << 6U | (bytes[offset + 2] & 0x3FU);
-            offset += 3;
-        } else {
-            return std::nullopt;
-        }
-        if (code_point <= 0xFFFFU) {
-            output.push_back(static_cast<char16_t>(code_point));
-        } else {
-            code_point -= 0x10000U;
-            output.push_back(
-                static_cast<char16_t>(0xD800U + (code_point >> 10U)));
-            output.push_back(
-                static_cast<char16_t>(0xDC00U + (code_point & 0x3FFU)));
-        }
-    }
-    return output;
-}
-
 absl::StatusOr<::ysm::java::Ref<jstring>> NewUtf8String(
     JNIEnv_* env, std::string_view value) {
-    auto decoded = DecodeUtf8(value);
-    if (!decoded.has_value() ||
+    auto decoded = U8ToU16(value);
+    if (!decoded.ok() ||
         decoded->size() >
             static_cast<std::size_t>(std::numeric_limits<jsize>::max())) {
         return absl::InvalidArgumentError("Invalid UTF-8 diagnostic");
@@ -221,7 +163,7 @@ absl::StatusOr<jobject> NewFailureResult(JNIEnv_* env,
             "A failure result requires a non-success status");
     }
     std::string_view diagnostic = status.message();
-    if (diagnostic.size() > 4096 || !DecodeUtf8(diagnostic).has_value()) {
+    if (diagnostic.size() > 4096 || !U8ToU16(diagnostic).ok()) {
         diagnostic = "Native legacy import failed";
     }
     auto constructor = FindResultConstructor(env);

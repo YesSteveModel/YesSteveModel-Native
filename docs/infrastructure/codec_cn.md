@@ -30,6 +30,8 @@ codec API 读取 `BufferViewR`，写入调用方 buffer 或 `BufferManaged`。�
 
 `codec::Archive<Zip>` / `codec::Archive<SevenZip>` 提供 `Ok`、`Files`、`Directories`、路径查询和 `Extract`。构造后先检查 `Ok()`；entry 和目录 view 不得超出 archive 生命周期。
 
+`Entries()` 返回原始完整文件成员表，不应用 VFS 根折叠。每个 entry 保留名称、大小和可选 CRC；缺 CRC 不表示 CRC 为零。构造传播目录读取错误，并拒绝无法唯一映射到 tree 的成员。ZIP 文件构造只读取目录，成员解码延迟到首次 `Extract`。可选的 caller-owned `ArchiveTrace` 记录实际请求区间与目录／成员解码次数；关闭 archive 前保活该观察器。
+
 用 `BufferViewR` 构造时借用输入 backing，调用方必须保活且不修改这段 bytes，直到 archive 销毁；路径构造由 archive 管理文件访问。`Extract` 写入调用方的 `BufferManaged`，输出由调用方拥有。
 
 目录树会反复折叠“没有直接文件且只有一个子目录”的根节点。枚举和字符串查询相对折叠后的根；entry 的 `FullName()` 仍是包内完整名称。例如包中仅有：

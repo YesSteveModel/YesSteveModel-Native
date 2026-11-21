@@ -18,6 +18,7 @@ class YsmConan(ConanFile):
     }
 
     def requirements(self):
+        self.requires("sqlitecpp/3.4.0@ysm/stable")
         self.requires("mimalloc/3.6.0@ysm/stable")
         self.requires("cpu_features/0.11.0@ysm/stable")
         self.requires("abseil/20260817.0@ysm/stable")
@@ -39,6 +40,7 @@ class YsmConan(ConanFile):
         self.requires("cryptopp/8.9.0@ysm/stable")
         self.requires("proxy/4.1.0@ysm/stable")
         self.requires("pystring/1.2.0@ysm/stable")
+        self.requires("simdutf/9.4.0@ysm/stable")
         self.requires("optional_ref/0.3.1@ysm/stable")
         self.requires("magic_enum/0.9.8@ysm/stable")
         self.requires("jni/8.0.0@ysm/stable")

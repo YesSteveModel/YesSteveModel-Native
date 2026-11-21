@@ -5,6 +5,7 @@
 #include <fstream>
 
 #include "buffer.h"
+#include "codec/archive_trace.h"
 #include "err.h"
 #include "fs.h"
 #include "non_copyable.h"
@@ -16,6 +17,7 @@ class FileStream : public NonCopyable {
     std::ifstream stream_;
     BufferManaged buffer_;
     size_t buffer_position_ = 0;
+    ArchiveTrace* trace_;
 
     struct {
         FileStream* ctx;
@@ -23,7 +25,7 @@ class FileStream : public NonCopyable {
     } vtable_holder_;
 
    public:
-    explicit FileStream(const fs::path& path);
+    explicit FileStream(const fs::path& path, ArchiveTrace* trace = nullptr);
     absl::Status Ok() const noexcept;
 
     [[nodiscard]] ILookInStreamPtr vtable() const noexcept;

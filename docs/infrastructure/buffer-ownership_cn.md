@@ -40,7 +40,9 @@ auto payload = Slice(cursor, 0, payload_size);
 
 `CStringView` 是保证 NUL 结尾的 borrowed view；底层字符必须保持存活且地址稳定。
 
-`U16ToU8`、`U8ToNative`、`U16ToNative`、`NativeToU8`、`PathToU8` 和 `U8ToPath` 统一平台转换。部分失败以空字符串返回，无法与合法空输入区分；需要报告转换错误时应扩展 status API。
+`U8ToU16` 和 `U16ToU8` 严格校验输入，保留嵌入的 NUL。合法空输入返回空字符串。非法输入返回 `InvalidArgument`，错误消息中的偏移量从 0 开始，单位分别为 UTF-8 字节和 UTF-16 码元。
+
+`U8ToNative`、`U16ToNative`、`NativeToU8`、`PathToU8` 和 `U8ToPath` 处理本地编码和路径。
 
 ## 文件 I/O
 

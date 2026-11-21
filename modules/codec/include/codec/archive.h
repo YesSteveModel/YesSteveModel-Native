@@ -15,6 +15,7 @@ class Archive final : NonCopyable {
     ArchiveType archive_;
     std::vector<EntryType> entries_;
     TreeType tree_;
+    absl::Status status_;
     NodeType& root_;
 
    public:
@@ -25,10 +26,14 @@ class Archive final : NonCopyable {
     explicit Archive(BufferViewR archive_buffer)
         : archive_(archive_buffer), root_(BuildTree()) {}
 
-    explicit Archive(const fs::path& path)
-        : archive_(path), root_(BuildTree()) {}
+    template <typename... Args>
+    explicit Archive(const fs::path& path, Args&&... args)
+        : archive_(path, std::forward<Args>(args)...), root_(BuildTree()) {}
 
-    absl::Status Ok() const { return archive_.Ok(); }
+    absl::Status Ok() const { return status_; }
+
+    // The original member set is independent of the VFS root folding.
+    std::span<const EntryType> Entries() const { return entries_; }
 
     auto Files(std::string_view path = kRoot) const {
         static decltype(root_.values) empty;
@@ -64,17 +69,23 @@ class Archive final : NonCopyable {
     absl::Status Extract(std::string_view file_name, BufferManaged& buffer) {
         if (auto entry = root_[file_name]) {
             buffer.resize(entry->Size());
-            return archive_.Extract(entry, buffer);
+            return archive_.Extract(entry.value(), buffer);
         }
         return absl::NotFoundError("File not found");
     }
 
    private:
     NodeType& BuildTree() {
-        [[maybe_unused]] auto visit_status = archive_.Visit(
+        status_ = archive_.Visit(
             [&](auto&& entry) { entries_.emplace_back(std::move(entry)); });
+        if (!status_.ok())
+            return tree_.root();
         for (auto& entry : entries_) {
-            tree_.emplace(entry.FullName(), entry);
+            if (!tree_.emplace(entry.FullName(), entry)) {
+                status_ =
+                    absl::InvalidArgumentError("Ambiguous archive member"sv);
+                return tree_.root();
+            }
         }
         auto root = &tree_.root();
         while (root->values.empty() && root->children.size() == 1) {
