@@ -15,12 +15,13 @@ set "CMAKE_EXE="
 set "NINJA_EXE="
 set "DO_EXPORT="
 set "INSTALL_PROFILE="
-set "BUILD_PROFILE="
+set "BUILD_COMMAND="
 set "TOOLCHAIN_PATH="
 set "NATIVE_PROFILE=native"
 set "BUILD_ENV_PROFILE=win-x64"
 set "BUILD_TYPE=Release"
 set "DEPS_ONLY="
+set "BUILD_ONLY="
 
 :parse_args
 if "%~1"=="" goto :after_args
@@ -35,24 +36,27 @@ if /I "%~1"=="setup" (
     shift
     goto :parse_setup_args
 )
-if /I "%~1"=="build" (
-    if "%~2"=="" (
-        echo error: build requires a profile name.
-        goto :usage_error
-    )
-    if defined BUILD_PROFILE (
-        echo error: build was specified more than once.
-        goto :usage_error
-    )
-    set "INSTALL_PROFILE=%~2"
-    set "BUILD_PROFILE=%~2"
-    shift
-    shift
-    goto :parse_build_args
-)
+if /I "%~1"=="build" goto :parse_build_command
+if /I "%~1"=="test" goto :parse_build_command
+if /I "%~1"=="benchmark" goto :parse_build_command
 
 echo error: unknown command: %~1
 goto :usage_error
+
+:parse_build_command
+if /I "%~2"=="-h" goto :usage_ok
+if /I "%~2"=="--help" goto :usage_ok
+if "%~2"=="" (
+    echo error: %~1 requires a profile name.
+    goto :usage_error
+)
+set "INSTALL_PROFILE=%~2"
+set "BUILD_COMMAND=build"
+if /I "%~1"=="test" set "BUILD_COMMAND=test"
+if /I "%~1"=="benchmark" set "BUILD_COMMAND=benchmark"
+shift
+shift
+goto :parse_build_args
 
 :parse_setup_args
 if "%~1"=="" goto :after_args
@@ -107,7 +111,20 @@ if /I "%~1"=="--cache" (
     goto :parse_build_args
 )
 if /I "%~1"=="--deps-only" (
+    if not "%BUILD_COMMAND%"=="build" (
+        echo error: --deps-only is only supported by build.
+        goto :usage_error
+    )
     set "DEPS_ONLY=1"
+    shift
+    goto :parse_build_args
+)
+if /I "%~1"=="--build-only" (
+    if "%BUILD_COMMAND%"=="build" (
+        echo error: --build-only is only supported by test and benchmark.
+        goto :usage_error
+    )
+    set "BUILD_ONLY=1"
     shift
     goto :parse_build_args
 )
@@ -117,7 +134,7 @@ if /I "%~1"=="--debug" (
     goto :parse_build_args
 )
 
-echo error: unknown build argument: %~1
+echo error: unknown %BUILD_COMMAND% argument: %~1
 goto :usage_error
 
 :after_args
@@ -150,7 +167,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if not defined BUILD_PROFILE goto :cmake_checked
+if not defined BUILD_COMMAND goto :cmake_checked
 if defined DEPS_ONLY goto :cmake_checked
 if defined TOOLCHAIN_PATH (
     set "CMAKE_EXE=%TOOLCHAIN_PATH%\tool\cmake\bin\cmake.exe"
@@ -186,8 +203,7 @@ if defined DEPS_ONLY (
     if errorlevel 1 set "BOOTSTRAP_RESULT=1"
     goto :finish
 )
-if not defined BUILD_PROFILE goto :finish
-call :build "%BUILD_PROFILE%"
+call :run_conan_with_profile "%INSTALL_PROFILE%" build "user.ysm:build_mode=%BUILD_COMMAND%"
 if errorlevel 1 set "BOOTSTRAP_RESULT=1"
 
 :finish
@@ -210,7 +226,7 @@ if /I "%INSTALL_PROFILE%"=="%NATIVE_PROFILE%" (
     exit /b 0
 )
 if not defined TOOLCHAIN_PATH (
-    echo error: without --toolchain, build profile must be %NATIVE_PROFILE%.
+    echo error: without --toolchain, %BUILD_COMMAND% profile must be %NATIVE_PROFILE%.
     exit /b 1
 )
 exit /b 0
@@ -247,6 +263,9 @@ call :run_conan export "%~1" --user=ysm --channel=stable
 exit /b %ERRORLEVEL%
 
 :run_conan_with_profile
+set "BUILD_MODE_CONF="
+if not "%~3"=="" set "BUILD_MODE_CONF=-c:h %~3"
+if defined BUILD_ONLY set "BUILD_MODE_CONF=%BUILD_MODE_CONF% -c:h user.ysm:build_only=True"
 if not exist "%PROFILE_OVERRIDE%" (
     echo error: project profile override does not exist: %PROFILE_OVERRIDE%
     exit /b 1
@@ -260,11 +279,11 @@ if defined TOOLCHAIN_PATH (
         echo error: toolchain build profile does not exist: %TOOLCHAIN_PATH%\conan\%BUILD_ENV_PROFILE%
         exit /b 1
     )
-    call :run_conan %~2 "%ROOT%" -pr:h "%TOOLCHAIN_PATH%\conan\%~1" -pr:h "%PROFILE_OVERRIDE%" -pr:b "%TOOLCHAIN_PATH%\conan\%BUILD_ENV_PROFILE%" --no-remote --build=missing -s build_type=%BUILD_TYPE% -c:h "user.target:profile=%~1" --core-conf core.graph:compatibility_mode=optimized
+    call :run_conan %~2 "%ROOT%" -pr:h "%TOOLCHAIN_PATH%\conan\%~1" -pr:h "%PROFILE_OVERRIDE%" -pr:b "%TOOLCHAIN_PATH%\conan\%BUILD_ENV_PROFILE%" --no-remote --build=missing -s build_type=%BUILD_TYPE% -c:h "user.target:profile=%~1" --core-conf core.graph:compatibility_mode=optimized %BUILD_MODE_CONF%
 ) else (
     call :run_conan profile detect -e
     if errorlevel 1 exit /b 1
-    call :run_conan %~2 "%ROOT%" -pr:h default -pr:h "%PROFILE_OVERRIDE%" -s:h compiler.runtime=static -pr:b default --no-remote --build=missing -s build_type=%BUILD_TYPE% -c:h "user.target:profile=%NATIVE_PROFILE%" --core-conf core.graph:compatibility_mode=optimized
+    call :run_conan %~2 "%ROOT%" -pr:h default -pr:h "%PROFILE_OVERRIDE%" -s:h compiler.runtime=static -pr:b default --no-remote --build=missing -s build_type=%BUILD_TYPE% -c:h "user.target:profile=%NATIVE_PROFILE%" --core-conf core.graph:compatibility_mode=optimized %BUILD_MODE_CONF%
 )
 exit /b %ERRORLEVEL%
 
@@ -272,10 +291,6 @@ exit /b %ERRORLEVEL%
 call :run_conan_with_profile "%~1" install
 if errorlevel 1 exit /b %ERRORLEVEL%
 call :run_conan cache clean --build
-exit /b %ERRORLEVEL%
-
-:build
-call :run_conan_with_profile "%~1" build
 exit /b %ERRORLEVEL%
 
 :run_conan
@@ -299,13 +314,16 @@ exit /b 2
 echo Usage:
 echo   %~nx0 setup [--toolchain ^<toolchain_path^>] [--cache ^<path^>]
 echo   %~nx0 build ^<profile^> [--toolchain ^<toolchain_path^>] [--cache ^<path^>] [--deps-only] [--debug]
+echo   %~nx0 test ^<profile^> [--toolchain ^<toolchain_path^>] [--cache ^<path^>] [--build-only] [--debug]
+echo   %~nx0 benchmark ^<profile^> [--toolchain ^<toolchain_path^>] [--cache ^<path^>] [--build-only] [--debug]
 echo.
 echo Build mode defaults to Release. Pass --debug to use Debug.
 echo Pass --cache to set CONAN_HOME explicitly; the default is conan/cache.
-echo Setup and build use ^<toolchain_path^>/tool/conan/bin/conan.exe when --toolchain is set, otherwise PATH.
-echo Without --toolchain, build requires profile %NATIVE_PROFILE% and uses host profile default + conan/profile-override and build profile default.
-echo With --toolchain, build uses ^<toolchain_path^>/conan/^<profile^> + conan/profile-override and a win-x64 build profile; profile %NATIVE_PROFILE% is not allowed.
+echo Bootstrap uses ^<toolchain_path^>/tool/conan/bin/conan.exe when --toolchain is set, otherwise PATH.
+echo Without --toolchain, use profile %NATIVE_PROFILE% with host profile default + conan/profile-override and build profile default.
+echo With --toolchain, use ^<toolchain_path^>/conan/^<profile^> + conan/profile-override and a win-x64 build profile.
 echo conan build uses ^<toolchain_path^>/tool/cmake/bin/cmake.exe when --toolchain is set, otherwise PATH cmake.
 echo Build and generator directories are build/^<profile^>-^<build-type^>.
 echo Pass --deps-only to stop after conan install.
+echo Test and benchmark run their executables on the build host. Pass --build-only to skip execution.
 exit /b 0

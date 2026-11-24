@@ -1,3 +1,5 @@
+#include "fixture_directory.h"
+
 #include <codec/7z.h>
 #include <codec/archive.h>
 #include <codec/zip.h>
@@ -6,30 +8,38 @@
 #include <c_string_view.h>
 #include <filesystem>
 #include <fstream>
+#include <fs.h>
 #include <iostream>
-#include <iterator>
+#include <string_cvt.h>
 
 namespace ysm::codec {
 namespace {
-const auto kFixtures =
-    std::filesystem::path(__FILE__).parent_path().parent_path() / "data" /
-    "catalog-archives";
 constexpr size_t kZipDirectoryOffset = 262230;
 constexpr size_t kZipEndSize = 22;
 
 class ZipMetadataTest : public testing::Test {
   protected:
     void SetUp() override {
+        const auto& directory = test::FixtureDirectory();
+        if (directory.empty()) GTEST_SKIP() << "Supply --fixture-dir=<path>";
+
+        const auto fixture_path = directory / "catalog-archives" / "directory.zip";
+        BufferManaged fixture;
+        const auto status = FileRead(fixture_path, fixture);
+        ASSERT_TRUE(status.ok()) << status;
+        ASSERT_GT(fixture.size(), kZipDirectoryOffset + kZipEndSize)
+            << PathToU8(fixture_path);
+        bytes_.assign(reinterpret_cast<const char*>(fixture.data()), fixture.size());
+
         const auto timestamp =
             std::chrono::steady_clock::now().time_since_epoch().count();
         path_ = std::filesystem::temp_directory_path() /
                 ("ysm-zip-metadata-" + std::to_string(timestamp) + ".zip");
-        std::ifstream fixture(kFixtures / "directory.zip", std::ios::binary);
-        bytes_.assign(std::istreambuf_iterator<char>(fixture), {});
-        ASSERT_GT(bytes_.size(), kZipDirectoryOffset + kZipEndSize);
     }
 
-    void TearDown() override { std::filesystem::remove(path_); }
+    void TearDown() override {
+        if (!path_.empty()) std::filesystem::remove(path_);
+    }
 
     void Write() const {
         std::ofstream output(path_, std::ios::binary | std::ios::trunc);
@@ -42,9 +52,12 @@ class ZipMetadataTest : public testing::Test {
 };
 
 template <typename T>
-void CheckDirectory(const char* name, bool crc, uint64_t metadata_start) {
+void CheckDirectory(const std::filesystem::path& directory, const char* name,
+                    bool crc, uint64_t metadata_start) {
+    const auto path = directory / "catalog-archives" / name;
+    SCOPED_TRACE(PathToU8(path));
     ArchiveTrace trace;
-    Archive<T> archive(kFixtures / name, &trace);
+    Archive<T> archive(path, &trace);
     ASSERT_TRUE(archive.Ok().ok()) << archive.Ok();
     ASSERT_EQ(archive.Entries().size(), 2);
     EXPECT_EQ(archive.Entries()[0].Size(), 256 * 1024);
@@ -72,10 +85,13 @@ void CheckDirectory(const char* name, bool crc, uint64_t metadata_start) {
 }
 
 TEST(ArchiveMetadataTest, ZipDirectoryDoesNotExtractMembers) {
-    CheckDirectory<Zip>("directory.zip", true, kZipDirectoryOffset);
-    CheckDirectory<Zip>("directory-comment.zip", true, kZipDirectoryOffset);
-    CheckDirectory<Zip>("directory-zip64.zip", true, kZipDirectoryOffset);
-    CheckDirectory<Zip>("directory-prefix.zip", true, 263254);
+    const auto& directory = test::FixtureDirectory();
+    if (directory.empty()) GTEST_SKIP() << "Supply --fixture-dir=<path>";
+
+    CheckDirectory<Zip>(directory, "directory.zip", true, kZipDirectoryOffset);
+    CheckDirectory<Zip>(directory, "directory-comment.zip", true, kZipDirectoryOffset);
+    CheckDirectory<Zip>(directory, "directory-zip64.zip", true, kZipDirectoryOffset);
+    CheckDirectory<Zip>(directory, "directory-prefix.zip", true, 263254);
 }
 
 TEST_F(ZipMetadataTest, DigitalSignatureMustBeAtTheEndOfTheMemberDirectory) {
@@ -148,10 +164,13 @@ TEST_F(ZipMetadataTest, CommentScanDoesNotReadBeforeTheEndRecord) {
 }
 
 TEST(ArchiveMetadataTest, SevenZipCompressedAndPlainHeadersPreserveMissingCrc) {
-    CheckDirectory<SevenZip>("encoded.7z", true, 262198);
-    CheckDirectory<SevenZip>("plain.7z", true, 262198);
-    CheckDirectory<SevenZip>("encoded-no-crc.7z", false, 262198);
-    CheckDirectory<SevenZip>("plain-no-crc.7z", false, 262198);
+    const auto& directory = test::FixtureDirectory();
+    if (directory.empty()) GTEST_SKIP() << "Supply --fixture-dir=<path>";
+
+    CheckDirectory<SevenZip>(directory, "encoded.7z", true, 262198);
+    CheckDirectory<SevenZip>(directory, "plain.7z", true, 262198);
+    CheckDirectory<SevenZip>(directory, "encoded-no-crc.7z", false, 262198);
+    CheckDirectory<SevenZip>(directory, "plain-no-crc.7z", false, 262198);
 }
 }  // namespace
 }  // namespace ysm::codec

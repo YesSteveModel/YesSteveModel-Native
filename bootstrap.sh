@@ -16,27 +16,31 @@ cmake_exe=""
 ninja_exe=""
 do_export=""
 install_profile=""
-build_profile=""
+build_command=""
 toolchain_path=""
 native_profile="native"
 build_env_profile=""
 build_type="Release"
 deps_only=""
+build_only=""
 
 usage() {
     cat <<EOF
 Usage:
   $(basename "$0") setup [--toolchain <toolchain_path>] [--cache <path>]
   $(basename "$0") build <profile> [--toolchain <toolchain_path>] [--cache <path>] [--deps-only] [--debug]
+  $(basename "$0") test <profile> [--toolchain <toolchain_path>] [--cache <path>] [--build-only] [--debug]
+  $(basename "$0") benchmark <profile> [--toolchain <toolchain_path>] [--cache <path>] [--build-only] [--debug]
 
 Build mode defaults to Release. Pass --debug to use Debug.
 Pass --cache to set CONAN_HOME explicitly; the default is conan/cache.
-Setup and build use <toolchain_path>/tool/conan/bin/conan when --toolchain is set, otherwise PATH.
-Without --toolchain, build requires profile native and uses host profile default + conan/profile-override and build profile default.
-With --toolchain, build uses <toolchain_path>/conan/<profile> + conan/profile-override and an OS build profile; profile native is not allowed.
+Bootstrap uses <toolchain_path>/tool/conan/bin/conan when --toolchain is set, otherwise PATH.
+Without --toolchain, use profile native with host profile default + conan/profile-override and build profile default.
+With --toolchain, use <toolchain_path>/conan/<profile> + conan/profile-override and an OS build profile.
 conan build uses <toolchain_path>/tool/cmake/bin/cmake when --toolchain is set, otherwise PATH cmake.
 Build and generator directories are build/<profile>-<build-type>.
 Pass --deps-only to stop after conan install.
+Test and benchmark run their executables on the build host. Pass --build-only to skip execution.
 EOF
 }
 
@@ -100,7 +104,19 @@ parse_build_args() {
                 shift 2
                 ;;
             --deps-only)
+                if [[ "$build_command" != build ]]; then
+                    echo "error: --deps-only is only supported by build." >&2
+                    usage_error
+                fi
                 deps_only=1
+                shift
+                ;;
+            --build-only)
+                if [[ "$build_command" == build ]]; then
+                    echo "error: --build-only is only supported by test and benchmark." >&2
+                    usage_error
+                fi
+                build_only=1
                 shift
                 ;;
             --debug)
@@ -108,7 +124,7 @@ parse_build_args() {
                 shift
                 ;;
             *)
-                echo "error: unknown build argument: $1" >&2
+                echo "error: unknown $build_command argument: $1" >&2
                 usage_error
                 ;;
         esac
@@ -131,18 +147,21 @@ while (($#)); do
             parse_setup_args "$@"
             break
             ;;
-        build)
-            if (($# < 2)); then
-                echo "error: build requires a profile name." >&2
-                usage_error
-            fi
-            if [[ -n "$build_profile" ]]; then
-                echo "error: build was specified more than once." >&2
-                usage_error
-            fi
-            install_profile="$2"
-            build_profile="$2"
-            shift 2
+        build|test|benchmark)
+            build_command="$1"
+            shift
+            case "${1-}" in
+                -h|--help)
+                    usage
+                    exit 0
+                    ;;
+                "")
+                    echo "error: $build_command requires a profile name." >&2
+                    usage_error
+                    ;;
+            esac
+            install_profile="$1"
+            shift
             parse_build_args "$@"
             break
             ;;
@@ -153,7 +172,7 @@ while (($#)); do
     esac
 done
 
-if [[ -z "$do_export" && -z "$install_profile" && -z "$build_profile" ]]; then
+if [[ -z "$do_export" && -z "$install_profile" ]]; then
     usage_error
 fi
 
@@ -174,7 +193,7 @@ validate_profile_mode() {
     fi
 
     if [[ -z "$toolchain_path" ]]; then
-        echo "error: without --toolchain, build profile must be $native_profile." >&2
+        echo "error: without --toolchain, $build_command profile must be $native_profile." >&2
         return 1
     fi
 }
@@ -215,7 +234,7 @@ detect_build_env_profile() {
     esac
 }
 
-if [[ -n "$toolchain_path" && -n "$build_profile" ]]; then
+if [[ -n "$toolchain_path" && -n "$build_command" ]]; then
     detect_build_env_profile || exit 1
 fi
 
@@ -234,7 +253,7 @@ if ! check_executable "$conan_exe" "Conan executable"; then
     exit 1
 fi
 
-if [[ -n "$build_profile" && -z "$deps_only" ]]; then
+if [[ -n "$build_command" && -z "$deps_only" ]]; then
     if [[ -n "$toolchain_path" ]]; then
         cmake_exe="$toolchain_path/tool/cmake/bin/cmake"
         ninja_exe="$toolchain_path/tool/ninja/bin/ninja"
@@ -295,6 +314,7 @@ export_recipes() {
 run_conan_with_profile() {
     local conan_command="$1"
     local profile="$2"
+    shift 2
 
     if [[ ! -f "$profile_override" ]]; then
         echo "error: project profile override does not exist: $profile_override" >&2
@@ -319,7 +339,7 @@ run_conan_with_profile() {
             --build=missing \
             -s "build_type=$build_type" \
             -c:h "user.target:profile=$profile" \
-            --core-conf core.graph:compatibility_mode=optimized
+            --core-conf core.graph:compatibility_mode=optimized "$@"
     else
         run_conan profile detect -e || return $?
         run_conan "$conan_command" "$root" \
@@ -330,17 +350,13 @@ run_conan_with_profile() {
             --build=missing \
             -s "build_type=$build_type" \
             -c:h "user.target:profile=$native_profile" \
-            --core-conf core.graph:compatibility_mode=optimized
+            --core-conf core.graph:compatibility_mode=optimized "$@"
     fi
 }
 
 install_with_profile() {
     run_conan_with_profile install "$1" || return $?
     run_conan cache clean --build
-}
-
-build_with_profile() {
-    run_conan_with_profile build "$1"
 }
 
 cd -- "$root" || exit 1
@@ -353,8 +369,12 @@ fi
 if [[ "$result" == 0 && -n "$install_profile" ]]; then
     if [[ -n "$deps_only" ]]; then
         install_with_profile "$install_profile" || result=1
-    elif [[ -n "$build_profile" ]]; then
-        build_with_profile "$build_profile" || result=1
+    else
+        build_conf=(-c:h "user.ysm:build_mode=$build_command")
+        if [[ -n "$build_only" ]]; then
+            build_conf+=(-c:h user.ysm:build_only=True)
+        fi
+        run_conan_with_profile build "$install_profile" "${build_conf[@]}" || result=1
     fi
 fi
 

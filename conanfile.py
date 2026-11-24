@@ -1,6 +1,8 @@
 import os
 
 from conan import ConanFile
+from conan.errors import ConanInvalidConfiguration
+from conan.tools.build import can_run
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
 
 required_conan_version = ">=2.28"
@@ -51,6 +53,23 @@ class YsmConan(ConanFile):
         self.test_requires("benchmark/1.10.0@ysm/stable")
         self.test_requires("googletest/1.18.0@ysm/stable")
 
+    @property
+    def _build_mode(self):
+        return self.conf.get("user.ysm:build_mode", default="build", choices=("build", "test", "benchmark"))
+
+    @property
+    def _build_only(self):
+        return self.conf.get("user.ysm:build_only", default=False, check_type=bool)
+
+    def validate(self):
+        mode = self._build_mode
+        if mode == "build" or self._build_only:
+            return
+        if not can_run(self):
+            raise ConanInvalidConfiguration(f"bootstrap {mode} cannot run this target on the build host. Use --build-only.")
+        if mode == "test" and self.conf.get("tools.build:skip_test", check_type=bool):
+            raise ConanInvalidConfiguration("bootstrap test requires tools.build:skip_test to be disabled")
+
     def layout(self):
         target_profile = self.conf.get("user.target:profile", default=None)
         if target_profile is None:
@@ -77,5 +96,18 @@ class YsmConan(ConanFile):
 
     def build(self):
         cmake = CMake(self)
-        cmake.configure()
-        cmake.build(target="ysm-lib-jni")
+        mode = self._build_mode
+        if mode == "test":
+            cmake.configure(variables={
+                "BUILD_TESTING": "ON",
+                "CMAKE_CTEST_ARGUMENTS": "--output-on-failure;--no-tests=error",
+            })
+            cmake.build(target="ysm-test")
+            if not self._build_only:
+                cmake.test()
+        elif mode == "benchmark":
+            cmake.configure(variables={"YSM_BUILD_BENCHMARKS": "ON"})
+            cmake.build(target="ysm-benchmark" if self._build_only else "run-ysm-benchmark")
+        else:
+            cmake.configure()
+            cmake.build(target="ysm-lib-jni")

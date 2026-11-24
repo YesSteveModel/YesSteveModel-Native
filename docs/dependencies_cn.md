@@ -4,16 +4,6 @@
 
 引入前评估许可证、体积、受支持平台、线程与初始化模型、异常/RTTI/ABI 假设和维护成本。需要编译的生产依赖必须从源码构建并静态链接，纯头文件依赖按下文打包，最终只交付一个动态库；公开接口的依赖传播规则见下文。
 
-## 私有 SQLite
-
-SQLite 仅使用 SQLiteCpp 固定提交内的源码，版本随该提交固定；不另行下载或选择 SQLite 版本。来源与许可证见[第三方许可证](../THIRD_PARTY_LICENSES.md)。
-
-SQLiteCpp 配方导出 `SQLiteCpp::SQLiteCpp` 和 `SQLiteCpp::SQLite3`。前者传递链接同包的 SQLite 静态库；直接使用 C API 的测试链接后者。两个 target 都从包内 `include` 提供头文件，消费方不拼接路径。
-
-内置库保留 `SQLITE_THREADSAFE=1`，连接由 owner 串行使用。配方 patch 设置 `SQLITE_ZERO_MALLOC=1`、`SQLITE_DQS=0`、`SQLITE_DEFAULT_MEMSTATUS=0` 和 Windows 7 基线宏；上游选项关闭动态扩展。静态库保持 PIC，符号隐藏规则继承公共构建 hook。Storage 在首次 SQLite 调用前安装私有 mimalloc 回调，不接管宿主分配器。
-
-变更固定提交或编译选项后，运行 `StorageTest.PrivateAllocatorAndAtomicFirstFill` 及同 JVM 的 sqlite-jdbc 共存测试，并按本页[分配器符号检查](#分配器符号检查)核验静态库。最终动态库仍须检查导出和系统依赖；主机通过不能代替其他平台与最低系统验证。
-
 ## 检查上游更新
 
 在项目根目录运行 `python third-party/check_updates.py`。脚本需要 Python 3.10+、Git、PyYAML 和 packaging。缺少 Python 包时，运行 `python -m pip install PyYAML packaging`。
@@ -382,7 +372,7 @@ bash ./bootstrap.sh build native
 
 配方、数据或 patch 改动后重新 setup，再 build；共享 hook/profile 的二进制设置变化则还需递增 `conan/profile-override` 中的 `user.ysm:rev`，避免复用旧二进制。更换系统编译器、SDK 或 runtime 后核对 Conan settings，使用新的隔离缓存验证，不能假定系统变化都自动计入缓存键。当前流程不显式生成或传入 lockfile，版本与源码引用由本页的配方字段固定。
 
-完整 build 不自动运行测试。对能在当前主机执行的目标，启用测试并构建、运行相关用例；以下承接 PowerShell 示例，`<test-regex>` 替换为相关 CTest 用例匹配式：
+通过 [`bootstrap test`](build_cn.md#3-运行单元测试和性能基准) 构建并运行单元测试。需要按用例筛选时，可在现有构建目录中使用 CTest 的 `-R` 参数：
 
 ```powershell
 cmake -S . -B build/native-release -DBUILD_TESTING=ON

@@ -10,8 +10,18 @@ target_link_libraries(ysm-benchmark PRIVATE
         ysm-gfx-internal
         benchmark::benchmark)
 
+# A toolchain profile can set CMAKE_SYSTEM_NAME even when the executable runs on the build host.
+add_custom_target(run-ysm-benchmark
+        COMMAND "$<TARGET_FILE:ysm-benchmark>"
+        DEPENDS ysm-benchmark
+        USES_TERMINAL
+        VERBATIM)
+
 if (YSM_X64)
-    if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        set_source_files_properties(src/cglm_avx.cc PROPERTIES
+                COMPILE_OPTIONS "/arch:AVX2")
+    elseif (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
         set_source_files_properties(src/cglm_avx.cc PROPERTIES
                 COMPILE_OPTIONS "/clang:-mavx2;/clang:-mfma")
     else ()

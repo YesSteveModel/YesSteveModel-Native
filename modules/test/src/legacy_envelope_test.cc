@@ -1,42 +1,23 @@
+#include "fixture_directory.h"
+
 #include <gtest/gtest.h>
 
 #include <array>
 #include <cstdint>
-#include <filesystem>
-#include <fstream>
 #include <future>
 #include <latch>
 #include <random>
 #include <span>
-#include <stdexcept>
-#include <string>
 #include <vector>
 
+#include <fs.h>
 #include <legacy/v3.h>
+#include <string_cvt.h>
 
 #include <v3/codec/envelope.h>
 
 namespace ysm::legacy::v3::codec {
 namespace {
-std::vector<Byte> ReadFile(const std::filesystem::path& path) {
-    std::ifstream input(path, std::ios::binary | std::ios::ate);
-    if (!input) {
-        throw std::runtime_error("Unable to open test fixture");
-    }
-    const auto size = input.tellg();
-    if (size < std::streampos{0}) {
-        throw std::runtime_error("Unable to determine test fixture size");
-    }
-    std::vector<Byte> bytes(static_cast<std::size_t>(size));
-    input.seekg(0, std::ios::beg);
-    input.read(reinterpret_cast<char*>(bytes.data()),
-               static_cast<std::streamsize>(bytes.size()));
-    if (!input) {
-        throw std::runtime_error("Unable to read test fixture");
-    }
-    return bytes;
-}
-
 void ExpectStatus(std::span<const std::uint8_t> bytes,
                   absl::StatusCode status) {
     const auto result = Import(bytes);
@@ -84,10 +65,14 @@ TEST(LegacyEnvelopeTest, EnforcesSourceAndSummaryCeilingsBeforeDecode) {
 }
 
 TEST(LegacyEnvelopeTest, DecodesHistoricalDynamicTransformVectorConcurrently) {
-    const auto fixture =
-        std::filesystem::path(__FILE__).parent_path().parent_path() / "data" /
-        "legacy_v3_dynamic_vector.ysm";
-    const auto source = ReadFile(fixture);
+    const auto& directory = test::FixtureDirectory();
+    if (directory.empty()) GTEST_SKIP() << "Supply --fixture-dir=<path>";
+
+    const auto fixture = directory / "legacy_v3_dynamic_vector.ysm";
+    SCOPED_TRACE(PathToU8(fixture));
+    BufferManaged source;
+    const auto status = FileRead(fixture, source);
+    ASSERT_TRUE(status.ok()) << status;
     std::array<std::future<absl::StatusOr<std::vector<Byte>>>, 4> decodes;
     std::latch start(decodes.size());
     for (auto& pending : decodes) {

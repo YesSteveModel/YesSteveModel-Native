@@ -58,3 +58,22 @@ Linux 示例:
 完成后可使用支持 CMake 的 IDE 打开并索引此项目。
 
 官方构建使用的工具链版本与目标环境见[官方构建环境](official-build-environment_cn.md)。
+
+## 3. 运行单元测试和性能基准
+
+`test` 构建 `ysm-test` 并通过 CTest 运行单元测试。`benchmark` 构建并运行 `ysm-benchmark`。
+
+```powershell
+.\bootstrap.cmd test native
+.\bootstrap.cmd benchmark native
+```
+
+在 Linux 或 macOS 上使用 `./bootstrap.sh` 和相同参数。这两个命令沿用 `build` 对 profile、`--toolchain`、`--cache` 和 `--debug` 的约定。交叉编译或只需生成可执行文件时，追加 `--build-only`，再按需在目标环境运行。
+
+通过 CTest 运行时，构建配置会传入源码树的 `modules/test/data`。将 `ysm-test` 复制到目标环境后，可用 `--fixture-dir=<path>` 指定该目录在目标环境中的位置。Windows 示例假定当前目录中有测试程序和复制过来的 `data` 目录。
+
+```powershell
+.\ysm-test.exe --fixture-dir=.\data
+```
+
+直接运行时，省略该参数会跳过依赖外部样本的用例。传入目录后，所需样本缺失、无法读取或损坏会使相应用例失败。
