@@ -181,6 +181,25 @@ std::string FileBytes(const std::filesystem::path& path) {
     return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
 }
 
+TEST_F(StorageTest, CreatesAndReopensDatabaseInUnicodeDirectory) {
+    const auto scope = root / u8"game-\u6A21\u578B";
+    ASSERT_TRUE(std::filesystem::create_directory(scope));
+
+    auto [database, opened] = PlayerData::Open(scope, running);
+    ASSERT_EQ(opened.outcome, Outcome::kFound);
+    ASSERT_NE(database, nullptr);
+    ASSERT_TRUE(Put(*database, "owner/model"_sv, "saved"_sv).result.committed);
+    database.reset();
+    ASSERT_TRUE(std::filesystem::is_regular_file(scope / "preferences-c2.sqlite"));
+
+    auto [reopened, result] = PlayerData::Open(scope, running);
+    ASSERT_EQ(result.outcome, Outcome::kFound);
+    ASSERT_NE(reopened, nullptr);
+    const auto saved = Read(*reopened, "owner/model"_sv);
+    ASSERT_EQ(saved.values.size(), 1u);
+    EXPECT_EQ(saved.values[0].value, "saved");
+}
+
 TEST_F(StorageTest, NewEpochStartsEmptyAndIgnoresDamagedOldPreferences) {
     const auto old_file = root / "preferences.sqlite";
     std::ofstream(old_file, std::ios::binary) << "not a sqlite database";
