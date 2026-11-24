@@ -29,7 +29,6 @@ if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
     add_cxx_compile_options(
         LLVM
         -fwhole-program-vtables
-        -fforce-emit-vtables
     )
     add_custom_link_options(
         -s
