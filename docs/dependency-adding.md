@@ -1,8 +1,6 @@
-# 添加依赖与接入 mimalloc
+# 添加依赖细则
 
-本页给出复用公共配方添加依赖的完整输入、操作与限制，无需先阅读已有 recipe、CMake 实现或构建系统文档。上游的源码版本、构建选项、库名和许可证仍须依据上游发布内容确定。[Bootstrap、Conan 与 CMake 构建系统](build-system_cn.md)是可选的原理参考。
-
-引入前评估许可证、体积、受支持平台、线程与初始化模型、异常/RTTI/ABI 假设和维护成本。需要编译的生产依赖必须从源码构建并静态链接，纯头文件依赖按下文打包，最终只交付一个动态库；公开接口的依赖传播规则见下文。
+本页给出复用公共配方添加依赖的完整输入、操作与限制，无需先阅读已有 recipe、CMake 实现或构建系统文档。依赖托管机制、准入评估标准与硬性红线见[依赖管理方式](dependencies.md)；[Bootstrap、Conan 与 CMake 构建系统](build-system.md)是可选的原理参考。
 
 ## 检查上游更新
 
@@ -274,7 +272,7 @@ target_link_libraries(ysm-codec PRIVATE Example::example)
 
 在 CMake 中声明实际使用的 C/C++ 语言、静态库 target、include 目录、编译定义及链接依赖，保留所需的平台选择与配置头生成。编译器、runtime 和共享构建参数由项目工具链与 hook 提供；实际替换平台分配器调用时，再按本页规则注入 mimalloc。
 
-默认将 `CMakeLists.txt` 添加到源码根目录；放在子目录时设置 `build.subdir`。若提供安装规则，将静态库和头文件安装到 `lib/`、`include/`；否则设置 `build.install: false` 并补齐 `package.manual_headers` / `manual_build_headers`。`package.libs` 必须对应实际输出的静态库名，消费 target 仍由 package 元数据导出。生成 Git patch 时须将新增的 `CMakeLists.txt` 纳入 diff，操作方式见下文补丁流程。
+默认将 `CMakeLists.txt` 添加到源码根目录；放在子目录时设置 `build.subdir`。若提供安装规则，将静态库和头文件安装到 `lib/`、`include/`；否则设置 `build.install: false` 并补齐 `package.manual_headers` / `package.manual_build_headers`。`package.libs` 必须对应实际输出的静态库名，消费 target 仍由 package 元数据导出。生成 Git patch 时须将新增的 `CMakeLists.txt` 纳入 diff，操作方式见下文补丁流程。
 
 ## 公共配方的扩展边界
 
@@ -346,7 +344,7 @@ def package_info(self):
 
 ## 导出、构建与验证
 
-以下采用仓库内[构建指南](build_cn.md)的系统环境流程，命令均在 C++ 项目根目录执行。准备 Git 2.49+、Conan 2.28+、CMake 3.29+、Ninja、NASM 和可访问源码地址的网络，确保 PATH 中没有 Yasm。Windows 使用启用 C++ 与 CMake 组件的 Visual Studio 2022+，MSVC 构建前初始化 vcvars；GNU/Linux 使用支持 C++23 的 build-essential，Android 使用支持 C++23 的 NDK，macOS 使用支持 C++23 的 Xcode。
+以下采用仓库内[构建指南](build.md)的系统环境流程，命令均在 C++ 项目根目录执行。准备 Git 2.49+、Conan 2.28+、CMake 3.29+、Ninja、NASM 和可访问源码地址的网络，确保 PATH 中没有 Yasm。Windows 使用启用 C++ 与 CMake 组件的 Visual Studio 2022+，MSVC 构建前初始化 vcvars；GNU/Linux 使用支持 C++23 的 build-essential，Android 使用支持 C++23 的 NDK，macOS 使用支持 C++23 的 Xcode。
 
 Windows PowerShell：
 
@@ -364,7 +362,7 @@ bash ./bootstrap.sh build native --deps-only
 bash ./bootstrap.sh build native
 ```
 
-`native` 使用当前主机环境，不会因安装了 Android NDK 等交叉工具就自动切换目标平台。非官方目标的环境约束与适配检查见[非官方平台适配](platform-porting_cn.md)。
+`native` 使用当前主机环境，不会因安装了 Android NDK 等交叉工具就自动切换目标平台。非官方目标的环境约束与适配检查见[非官方平台适配](platform-porting.md)。
 
 每条命令成功后再进入下一步。`setup` 只导出配方；`--deps-only` 阶段会构建缺失依赖并生成主项目配置，仅在 install 成功后清理依赖构建目录，可用于单独定位依赖问题，也可省略。profile 探测、install 或清理失败均返回非零状态，install 失败保留构建目录供排查。最后的完整 build 才会构建 `ysm-lib-jni` 并验证最终链接。默认 Release，两个 build 命令均追加 `--debug` 可切换 Debug。
 
@@ -372,7 +370,7 @@ bash ./bootstrap.sh build native
 
 配方、数据或 patch 改动后重新 setup，再 build；共享 hook/profile 的二进制设置变化则还需递增 `conan/profile-override` 中的 `user.ysm:rev`，避免复用旧二进制。更换系统编译器、SDK 或 runtime 后核对 Conan settings，使用新的隔离缓存验证，不能假定系统变化都自动计入缓存键。当前流程不显式生成或传入 lockfile，版本与源码引用由本页的配方字段固定。
 
-通过 [`bootstrap test`](build_cn.md#3-运行单元测试和性能基准) 构建并运行单元测试。需要按用例筛选时，可在现有构建目录中使用 CTest 的 `-R` 参数：
+通过 [`bootstrap test`](build.md#3-运行单元测试和性能基准) 构建并运行单元测试。需要按用例筛选时，可在现有构建目录中使用 CTest 的 `-R` 参数：
 
 ```powershell
 cmake -S . -B build/native-release -DBUILD_TESTING=ON

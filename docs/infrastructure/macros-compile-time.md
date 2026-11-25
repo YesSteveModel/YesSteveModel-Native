@@ -1,6 +1,6 @@
 # 宏与编译期设施
 
-[返回基建总览](../infrastructure_cn.md)
+[返回基建总览](../infrastructure.md)
 
 主要头文件：`<log.h>`、`<profile.h>`、`<inline.h>`、`<fast_math.h>`、`<assume.h>`、`<cpu.h>`、`<export.h>`、`<macro.h>`。
 

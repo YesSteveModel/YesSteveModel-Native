@@ -1,12 +1,6 @@
 # 开发指南
 
-[构建指南](build_cn.md)：工具链、依赖准备与构建流程。
-
-[依赖接入](dependencies_cn.md)：添加 Conan 依赖、注入 mimalloc target 与分配器 patch 规则。
-
-[非官方平台适配](platform-porting_cn.md)：新增 OS、架构或 runtime 的适配范围、成本与验证要点。
-
-[基建总览](infrastructure_cn.md)：尽量复用现有基建。
+[基建总览](infrastructure.md)：尽量复用现有基建。
 - 现有公开门面能够承担职责时，必须复用，不在业务模块复制 helper 或建立平行抽象。
 - 契约不足时，优先扩展原门面。只有职责、生命周期或性能约束不同且无法合理扩展时，才新增机制，并说明不能复用的原因与维护成本。
 
@@ -22,16 +16,16 @@
 - 以函数式、声明式组合为主。仅在需要封装所有权、生命周期、持续状态、不变量或行为契约时引入 class。
 - 尽量避免虚函数；编译期多态使用重载、模板和 CRTP 等模式，运行时多态使用 Microsoft Proxy。
 - 禁止 `dynamic_cast`；允许 `std::any_cast`。
-- public header 中的复杂成员类型和内部实现依赖尽量使用项目 [PImpl 设施](infrastructure/pimpl_cn.md)隔离。
+- public header 中的复杂成员类型和内部实现依赖尽量使用项目 [Static PImpl](infrastructure/pimpl.md) 隔离。
 - 避免裸指针：
   - owning 使用直接对象或智能指针；borrow 使用引用。
-  - 可空 owning 使用 `std::optional` 或智能指针；可空 borrow 使用 [`gch::optional_ref`](infrastructure/optional-ref_cn.md)。
+  - 可空 owning 使用 `std::optional` 或智能指针；可空 borrow 使用 [`gch::optional_ref`](infrastructure/optional-ref.md)。
   - STL 容器需要存储不可空 borrow 时，使用 `std::reference_wrapper<T>` 作为元素类型。
   - 使用 `std::array` 代替 C 数组。
   - 使用 `std::span` 表示连续内存访问。
   - C 库边界必须补充所有权与生命周期契约，并在适配层立即把裸指针转换或封装为安全类型，不向业务代码传播。
 - 需要智能指针时，优先使用 `std::unique_ptr`。
-- 使用智能指针，若无法从上下文或对象类型语义推断可空性，必须由接口/变量名称来显式反映。
+- 使用智能指针，若无法从上下文或对象类型语义推断可空性，必须由接口/参数/变量名称来显式反映。
 - 避免 `std::unordered_map` / `std::unordered_set`，使用 `absl::flat_hash_map` / `absl::flat_hash_set`。
 - 项目代码只使用 `enum class`；wire、JNI、bit-pack 和 ABI 边界显式指定底层类型。生成代码与第三方代码除外。
 - 能由函数、模板或 `constexpr` 表达的能力不新增宏。
@@ -52,35 +46,6 @@
 - 开发任务允许引入新依赖。引入前评估官方 target 的可构建性、许可证、体积、线程/初始化模型、异常/RTTI/ABI 假设及维护成本。
 - 依赖链接到最窄的消费 target；仅当依赖类型出现在 public header 时使用 `PUBLIC` / `INTERFACE`。同步更新 Conan 配置、导入 target、锁定信息和 `THIRD_PARTY_LICENSES.md`。
 - 现有通用库包括 Abseil、pystring（Python 语义字符串处理）、Microsoft Proxy（非继承式 type erasure）、optional_ref、magic_enum、cglm、yalantinglibs、mimalloc、cpu_features 和 Tracy。
-
-### Module 概览
-
-CMake target 按 `ysm-<module>` 命名。
-
-| module | 职责 |
-| --- | --- |
-| `proto` | 资产、manifest 与模型数据的协议类型。 |
-| `core` | buffer、错误处理、生命周期、日志及 CPU 等通用设施。 |
-| `gfx` | 模型烘焙、缓存、姿态、渲染状态和顶点输出。 |
-| `codec` | 哈希、编码、压缩、图片、归档及音频解码。 |
-| `java` | JNI 引用、数据转换、handle 和 native entry 注册。 |
-| `storage` | 区域 allocator、Catalog、Remote、Bake、PlayerData 业务能力及 CACHE 根消费者协调；私有实现持有 SQLite 连接、schema 和复用语句，不裁决模型权限或业务资格。 |
-| `legacy` | 旧版模型容器的解码与转换。 |
-| `lib-jni` | 组装 Java native ABI 和旧版入口。 |
-| `test` | 行为测试；启用 `BUILD_TESTING` 时构建。 |
-| `benchmark` | 性能基准；启用 `YSM_BUILD_BENCHMARKS` 时构建。 |
-
-
-## 平台与 ISA 基线
-
-| target | ISA | OS / runtime |
-| --- | --- | --- |
-| Windows x86_64 | [`x86-64-v1`](https://clang.llvm.org/docs/UsersManual.html#x86) | Windows 7 SP1 |
-| Linux x86_64 | [`x86-64-v1`](https://clang.llvm.org/docs/UsersManual.html#x86) | Linux 3.13.9 + glibc 2.19 |
-| Android arm64 | `armv8-a` | Android API 28 |
-| macOS arm64 | Apple M1（接近 `armv8.5-a`） | macOS 14.5 |
-
-更高 ISA 只能位于隔离函数中，并在 `InitCpuInfo()` 后通过 runtime feature dispatch 选择；不得进入通用函数、静态初始化或未分派的 inline 路径。
 
 ## Java 符号依赖
 

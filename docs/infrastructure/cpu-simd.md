@@ -1,6 +1,6 @@
 # CPU、SIMD 与并行执行
 
-[返回基建总览](../infrastructure_cn.md)
+[返回基建总览](../infrastructure.md)
 
 主要头文件：`<cpu.h>`、`<cpu_topology.h>`（`core`）；`gfx/src/renderer/parallel_executor.h`（`gfx` 内部实现）。
 

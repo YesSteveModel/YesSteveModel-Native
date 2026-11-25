@@ -1,6 +1,6 @@
 # 协作取消
 
-[返回基建总览](../infrastructure_cn.md)
+[返回基建总览](../infrastructure.md)
 
 主要头文件：`<cancellation.h>`。状态属于 `ysm-core`，不依赖 JNI、存储、渲染或调度。
 

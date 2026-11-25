@@ -1,6 +1,6 @@
 # GFX 高级能力
 
-[返回基建总览](../infrastructure_cn.md)
+[返回基建总览](../infrastructure.md)
 
 主要头文件：`<gfx/bake/baked_model.h>`、`<gfx/bake/baked_serializer.h>`、`<gfx/math/pose_stack.h>`、`<gfx/renderer/model_state.h>`、`<gfx/renderer/render.h>`、`<gfx/renderer/schedule.h>`、`<gfx/renderer/color.h>`、`<gfx/renderer/bone_attribute.h>`、`<gfx/renderer/vertex/kind.h>`。
 

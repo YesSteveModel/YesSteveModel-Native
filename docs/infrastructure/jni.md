@@ -1,12 +1,12 @@
 # JNI 基建
 
-[返回基建总览](../infrastructure_cn.md)
+[返回基建总览](../infrastructure.md)
 
 主要头文件：`<java/ref.h>`、`<java/class.h>`、`<java/string.h>`、`<java/array.h>`、`<java/buffer.h>`、`<java/opaque_ptr.h>`、`<java/entry.h>`。
 
 JNI 边界依赖 `ysm-java`。
 
-JNI 胶合遵循[Java 符号依赖原则](../development_guide_cn.md#java-符号依赖)。除 entry 声明、描述符和注册绑定外，native 不查找或调用 Java 类、字段、构造器和方法。JNI 自带的 string、array 和 direct buffer 操作可用于交付载体。
+JNI 胶合遵循[Java 符号依赖原则](../development_guide.md#java-符号依赖)。除 entry 声明、描述符和注册绑定外，native 不查找或调用 Java 类、字段、构造器和方法。JNI 自带的 string、array 和 direct buffer 操作可用于交付载体。
 
 ## 引用、字符串与 class
 
@@ -98,7 +98,7 @@ public final class NativeCopyExample {
 
 每个 create/share 必须对应一次 `DestroyOpaquePtr`。异步工作在 handle 销毁前调用 `AcquireOpaquePtr`；handle 不提供 `T` 的线程安全性。
 
-通用取消使用 [core 取消状态](cancellation_cn.md)。Java `NativeCancellation.borrow` 保护原 handle 的读取窗口；entry 在窗口内获取共享保留。关闭等待 Java 借用结束，不等待已经独立保留状态的 native 消费者。
+通用取消使用 [core 取消状态](cancellation.md)。Java `NativeCancellation.borrow` 保护原 handle 的读取窗口；entry 在窗口内获取共享保留。关闭等待 Java 借用结束，不等待已经独立保留状态的 native 消费者。
 
 `CastOpaquePtr<T>` 的结果是 `StatusOr<reference_wrapper<shared_ptr<T>>>`，用 `YSM_DECLARE_OR_RETURN` 解包后借用 handle 内的 shared pointer；显式拷贝或 `AcquireOpaquePtr<T>` 才取得独立副本。
 
@@ -129,4 +129,4 @@ YSM_JNI_ENTRY(
 - status 或异常由 entry 转为日志和 fallback，不会自动抛出 Java exception。
 - entry 由 registrar 收集，并在 `BindEntry` 阶段统一注册。
 
-设备分类同样通过 `NativeRuntime` 与 `YSM_JNI_ENTRY` 进入，不在配置类建立 native 旁路。其 `jlong` 输入为最大堆 byte 值，失败 fallback 由 Java 门面解释；Java 缓存一次结果。编码与默认责任唯一见[设备配置默认](../../../YesSteveModel/docs/architecture/implementation/native-runtime/overview.md#设备配置默认)。
+设备分类同样通过 `NativeRuntime` 与 `YSM_JNI_ENTRY` 进入，不在配置类建立 native 旁路。其 `jlong` 输入为最大堆 byte 值，失败 fallback 由 Java 门面解释；Java 缓存一次结果。

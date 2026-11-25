@@ -1,6 +1,6 @@
 # 非官方平台适配
 
-本页用于评估和实现官方支持范围之外的 OS、CPU 架构或 runtime 组合。官方构建环境与目标矩阵以仓库内[官方构建环境](official-build-environment_cn.md)为准；这里不预设额外工具链包、安装目录或交叉 profile 已经存在。完成一次构建不代表该平台进入官方支持范围。
+本页用于评估和实现官方支持范围之外的 OS、CPU 架构或 runtime 组合。官方构建环境与目标矩阵以仓库内[官方构建环境](official-build-environment.md)为准；这里不预设额外工具链包、安装目录或交叉 profile 已经存在。完成一次构建不代表该平台进入官方支持范围。
 
 ## 先定义目标与成本
 
@@ -50,7 +50,7 @@ Shell 对应 `bash ./bootstrap.sh setup` 和 `bash ./bootstrap.sh build native`�
 
 ## 3. 核验整个依赖图
 
-按[依赖接入文档](dependencies_cn.md)维护配方和补丁，并核验直接、传递及测试依赖：
+按[添加依赖细则](dependency-adding.md)维护配方和补丁，并核验直接、传递及测试依赖：
 
 - 需要编译的非 CMake 依赖按依赖文档的“非 CMake 依赖”规则补齐构建入口，核验新增 CMake target 在目标平台上的源码选择和配置头生成；纯头文件库使用该文档的直接打包路径。
 - 确认上游支持目标的编译器、C/C++ runtime、汇编语法和 ISA；没有合适汇编后端时，选择可用且经过验证的通用实现，不能假设关闭 ASM 一定可行。

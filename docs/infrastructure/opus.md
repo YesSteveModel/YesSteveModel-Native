@@ -1,10 +1,10 @@
 # Opus 流解码
 
-[返回基建总览](../infrastructure_cn.md)
+[返回基建总览](../infrastructure.md)
 
 主要头文件：`<codec/opus.h>`。
 
-`codec::OpusAudioStream` 增量解码单一 Ogg/Opus logical stream，输出 48 kHz mono signed 16-bit PCM；双声道输入下混为 mono。它与生成入口共用严格 Ogg page、packet 和 granule 语义；page reader 与 muxer 不是普通音频入口。规范化生成见[音频规范化](audio-normalization_cn.md)。
+`codec::OpusAudioStream` 增量解码单一 Ogg/Opus logical stream，输出 48 kHz mono signed 16-bit PCM；双声道输入下混为 mono。它与生成入口共用严格 Ogg page、packet 和 granule 语义；page reader 与 muxer 不是普通音频入口。规范化生成见[音频规范化](audio-normalization.md)。
 
 ## 输入与结束协议
 

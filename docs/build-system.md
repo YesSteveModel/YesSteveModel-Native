@@ -1,6 +1,6 @@
 # Bootstrap、Conan 与 CMake 构建系统
 
-本页记录当前构建系统的职责与配置流。日常构建命令及环境要求见[构建指南](build_cn.md)，依赖维护见[添加依赖与接入 mimalloc](dependencies_cn.md)。
+本页记录当前构建系统的职责与配置流。日常构建命令及环境要求见[构建指南](build.md)，依赖管理原则见[依赖管理方式](dependencies.md)，配方与补丁维护见[添加依赖与接入 mimalloc 细则](dependency-adding.md)。
 
 ## 设计目标
 
@@ -12,7 +12,7 @@
 | 统一依赖与项目代码的构建条件 | 所有目标侧依赖与项目代码使用相同工具链和共享构建参数，统一 runtime、标准库、ABI、异常/RTTI、PIC 与链接策略，最大程度降低 ABI 不匹配等疑难问题。包自身所需选项和经过隔离的 ISA 特化仍可不同；构建主机工具使用 build 上下文。 |
 | 支持 Git patch 深度定制 | 将 mimalloc 接入、上游构建修正及不需要功能的裁剪随依赖配方导出，使从源码重建可重复应用同一组改动。升级依赖时必须重新核验 patch、分配器所有权与受影响平台，承担相应维护成本。 |
 
-这些是设计目标，不等同于当前所有路径已经完全隔离或实现字节级可复现。native 模式仍依赖系统环境，Git tag 也不等同于不可变提交；实际缓存与源码选择行为见下文。新增平台的适配范围与验收见[非官方平台适配](platform-porting_cn.md)。
+这些是设计目标，不等同于当前所有路径已经完全隔离或实现字节级可复现。native 模式仍依赖系统环境，Git tag 也不等同于不可变提交；实际缓存与源码选择行为见下文。新增平台的适配范围与验收见[非官方平台适配](platform-porting.md)。
 
 ## 组织与职责
 
@@ -54,7 +54,7 @@ flowchart TD
 | 不传 `--toolchain`，仅允许 `native` | 自动探测的 `default` + `conan/profile-override` | `default` |
 | 传 `--toolchain`，不允许 `native` | 工具链 `conan/<profile>` + `conan/profile-override` | 工具链内匹配构建主机的 profile；CMD 使用 `win-x64`，Shell 按 OS 选择。 |
 
-工具链模式由工具链目录提供 Conan、CMake、Ninja 及平台 profiles；`native` 模式使用 PATH 中的工具。CMD 的 `native` 路径额外指定静态 compiler runtime。完整工具链版本与目标环境由[官方构建环境](official-build-environment_cn.md)维护。
+工具链模式由工具链目录提供 Conan、CMake、Ninja 及平台 profiles；`native` 模式使用 PATH 中的工具。CMD 的 `native` 路径额外指定静态 compiler runtime。完整工具链版本与目标环境由[官方构建环境](official-build-environment.md)维护。
 
 主项目输出位于 `build/<profile>-<build-type>`，其中 build type 为小写；`generators` 子目录保存 Conan 生成的依赖配置、toolchain 与 presets。生成文件和 Conan cache 都是派生产物，配置变更应落在配方、profile 或 CMake 输入中。
 

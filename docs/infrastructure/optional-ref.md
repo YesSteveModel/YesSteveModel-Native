@@ -1,6 +1,6 @@
 # `gch::optional_ref` 可空借用
 
-[返回基建总览](../infrastructure_cn.md)
+[返回基建总览](../infrastructure.md)
 
 头文件：`<optional_ref.hpp>`。CMake target：`optional_ref`。
 

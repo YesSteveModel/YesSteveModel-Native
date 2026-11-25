@@ -1,6 +1,6 @@
 # 音频规范化
 
-[返回基建总览](../infrastructure_cn.md)
+[返回基建总览](../infrastructure.md)
 
 主要头文件：`<codec/audio.h>`。`InspectAudio`、`NormalizeAudio`、`ValidatePrefix` 和 `ValidateComplete` 是生成期音频入口；Java 的同步入口是 `AudioNormalizer`。容器选择、计价、存储和发布仍由 Java 拥有。
 

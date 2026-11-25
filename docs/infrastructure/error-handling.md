@@ -1,6 +1,6 @@
 # 错误模型与控制流
 
-[返回基建总览](../infrastructure_cn.md)
+[返回基建总览](../infrastructure.md)
 
 主要头文件：`<err.h>`。
 

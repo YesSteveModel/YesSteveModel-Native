@@ -1,6 +1,6 @@
 # 通用模板与 RAII
 
-[返回基建总览](../infrastructure_cn.md)
+[返回基建总览](../infrastructure.md)
 
 主要头文件：`<scope_guard.h>`、`<non_copyable.h>`、`<move_only.h>`、`<empty.h>`、`<enum.h>`、`<bitpack.h>`、`<hierarchy/path_walker.h>`、`<hierarchy/tree.h>`。
 
