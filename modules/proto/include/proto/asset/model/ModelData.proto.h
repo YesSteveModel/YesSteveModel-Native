@@ -1,8 +1,10 @@
 #pragma once
+#include <optional>
 #include <ylt/struct_pb.hpp>
 #include "proto/asset/model/data/geo_model.proto.h"
 #include "proto/asset/model/data/animation.proto.h"
 #include "proto/asset/model/data/animation_controller.proto.h"
+#include "proto/asset/model/data/physics.proto.h"
 
 namespace ysm::proto::asset::model {
 
@@ -37,7 +39,8 @@ struct ModelData : public iguana::base_impl<ModelData>  {
 	std::vector<GeoModelsEntry>geo_models;
 	std::vector<AnimationFilesEntry>animation_files;
 	std::vector<AnimationControllersEntry>animation_controllers;
+	std::optional<data::PhysicsDefinition> physics;
 };
-YLT_REFL(ModelData, geo_models, animation_files, animation_controllers);
+YLT_REFL(ModelData, geo_models, animation_files, animation_controllers, physics);
 
 }

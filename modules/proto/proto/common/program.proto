@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: CC0-1.0
+syntax = "proto3";
+
+package mixel.common;
+
+// Engine-owned, platform-independent Portable Program envelope.
+message Program {
+  uint32 format = 1;
+  oneof payload {
+    bytes bytecode = 2;
+    string source = 3;
+  }
+}

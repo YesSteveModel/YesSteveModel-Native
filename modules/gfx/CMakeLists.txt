@@ -26,5 +26,6 @@ target_link_libraries(ysm-gfx
         ysm-core
         cglm
         PRIVATE
+        ysm-model
         ysm-proto
         yalantinglibs)

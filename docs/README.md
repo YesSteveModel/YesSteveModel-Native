@@ -8,8 +8,10 @@
 flowchart LR
     core["core<br/>buffer / allocator / cpu / log / cancel"]
     proto["proto<br/>模型与资产 Schema 值类型"]
+    model["model<br/>模型骨序"]
     codec["codec<br/>hash / zstd / archive / image / opus"]
     gfx["gfx<br/>bake / pose / schedule / CPU render"]
+    physics["physics<br/>共享碰撞形状 / 每实体 Jolt 世界"]
     storage["storage<br/>SQLite 业务索引与协调"]
     legacy["legacy<br/>旧版格式解码与转换"]
     java["java<br/>JNI 载体 / opaque handle / entry 注册"]
@@ -17,16 +19,22 @@ flowchart LR
 
     core --> codec
     core --> gfx
+    core --> physics
     core --> storage
     core --> legacy
     core --> java
     proto --> gfx
+    proto --> model
+    proto --> physics
     proto --> legacy
+    model --> gfx
+    model --> physics
     codec --> legacy
 
     core --> jni
     codec --> jni
     gfx --> jni
+    physics --> jni
     storage --> jni
     legacy --> jni
     java --> jni

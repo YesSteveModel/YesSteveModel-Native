@@ -328,23 +328,23 @@ template <FixedString Desc>
 using EntryReturnT = typename DescriptorJniType<
     Desc, EntrySignature<Desc>::kReturnOffset>::type;
 
-template <FixedString Desc>
-using EntryImplementationResultT = std::conditional_t<
+template <FixedString Desc, bool Hot = false>
+using EntryImplementationResultT = std::conditional_t<Hot, EntryReturnT<Desc>, std::conditional_t<
     std::is_same_v<EntryReturnT<Desc>, void> ||
         std::is_same_v<EntryReturnT<Desc>, jboolean>,
-    absl::Status, absl::StatusOr<EntryReturnT<Desc>>>;
+    absl::Status, absl::StatusOr<EntryReturnT<Desc>>>>;
 
-template <FixedString Desc, typename Arguments = EntryArgumentListT<Desc>>
+template <FixedString Desc, bool Hot, typename Arguments = EntryArgumentListT<Desc>>
 struct EntryImplementationPointer;
 
-template <FixedString Desc, typename... Args>
-struct EntryImplementationPointer<Desc, EntryArgumentList<Args...>> {
-    using type = EntryImplementationResultT<Desc> (*)(JNIEnv_*, Args...);
+template <FixedString Desc, bool Hot, typename... Args>
+struct EntryImplementationPointer<Desc, Hot, EntryArgumentList<Args...>> {
+    using type = EntryImplementationResultT<Desc, Hot> (*)(JNIEnv_*, Args...) noexcept(Hot);
 };
 
-template <FixedString Desc>
+template <FixedString Desc, bool Hot = false>
 using EntryImplementationPointerT =
-    typename EntryImplementationPointer<Desc>::type;
+    typename EntryImplementationPointer<Desc, Hot>::type;
 
 struct EntryRegistration {
     CStringView class_name;
@@ -487,6 +487,13 @@ struct EntryThunk {
                   "absl::StatusOr<R> and take JNIEnv_* as its first argument");
 };
 
+template <auto Impl, FixedString Desc, auto Fallback, typename R, typename... Args>
+struct EntryThunk<Impl, Desc, Fallback, R (*)(JNIEnv_*, Args...) noexcept> {
+    static R JNICALL Invoke(JNIEnv_* env, jclass, Args... args) noexcept {
+        return Impl(env, args...);
+    }
+};
+
 template <auto Impl, FixedString Desc, auto Fallback, typename... Args>
 struct EntryThunk<Impl, Desc, Fallback,
                   absl::Status (*)(JNIEnv_*, Args...)> {
@@ -587,28 +594,32 @@ class EntryRegistrar final {
 #define YSM_JNI_ENTRY_INTERNAL_REGISTRAR(id)                             \
     YSM_MACROS_CONCAT_NAME(kYsmJniEntryRegistrar, id)
 
-#define YSM_JNI_ENTRY_INTERNAL_SIGNATURE(desc, names, id)                \
+#define YSM_JNI_ENTRY_INTERNAL_SIGNATURE(desc, names, id, hot)           \
     static auto YSM_JNI_ENTRY_INTERNAL_FUNCTION(id)(                     \
-        JNIEnv_* env YSM_JNI_ENTRY_INTERNAL_PARAMETERS(names))           \
-        ->::ysm::java::internal::EntryImplementationResultT<desc>
+        JNIEnv_* env YSM_JNI_ENTRY_INTERNAL_PARAMETERS(names)) noexcept(hot) \
+        ->::ysm::java::internal::EntryImplementationResultT<desc, hot>
 
-#define YSM_JNI_ENTRY_INTERNAL_IMPL(desc, names, id, ...)                \
+#define YSM_JNI_ENTRY_INTERNAL_IMPL(desc, names, id, hot, ...)           \
     static_assert(                                                       \
         ::ysm::java::internal::EntrySignature<desc>::kArgumentCount ==   \
             YSM_JNI_ENTRY_INTERNAL_PARAMETER_COUNT(names),               \
         "JNI descriptor argument count does not match the parameter "    \
         "name count");                                                  \
-    YSM_JNI_ENTRY_INTERNAL_SIGNATURE(desc, names, id);                   \
+    YSM_JNI_ENTRY_INTERNAL_SIGNATURE(desc, names, id, hot);              \
     [[maybe_unused]] static ::ysm::java::EntryRegistrar<                 \
         static_cast<                                                     \
-            ::ysm::java::internal::EntryImplementationPointerT<desc>>(   \
+            ::ysm::java::internal::EntryImplementationPointerT<desc, hot>>( \
             &YSM_JNI_ENTRY_INTERNAL_FUNCTION(id)),                       \
         desc __VA_OPT__(,) __VA_ARGS__>                                  \
         YSM_JNI_ENTRY_INTERNAL_REGISTRAR(id);                            \
-    YSM_JNI_ENTRY_INTERNAL_SIGNATURE(desc, names, id)
+    YSM_JNI_ENTRY_INTERNAL_SIGNATURE(desc, names, id, hot)
 
 #define YSM_JNI_ENTRY(desc, names, ...)                                  \
-    YSM_JNI_ENTRY_INTERNAL_IMPL(desc, names, __COUNTER__, __VA_ARGS__)
+    YSM_JNI_ENTRY_INTERNAL_IMPL(desc, names, __COUNTER__, false, __VA_ARGS__)
+
+// Hot entries own their exception boundary so they can preserve committed work.
+#define YSM_JNI_HOT_ENTRY(desc, names)                                   \
+    YSM_JNI_ENTRY_INTERNAL_IMPL(desc, names, __COUNTER__, true)
 
 absl::Status BindEntry(JNIEnv_* env);
 }  // namespace ysm::java

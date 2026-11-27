@@ -39,13 +39,18 @@ inline void DestroyOpaquePtr(jlong addr) {
 }
 
 template <typename T>
+std::shared_ptr<T>* TryCastOpaquePtr(jlong addr) noexcept {
+    return std::any_cast<std::shared_ptr<T>>(reinterpret_cast<std::any*>(addr));
+}
+
+template <typename T>
 absl::StatusOr<std::reference_wrapper<std::shared_ptr<T>>> CastOpaquePtr(
     jlong addr) {
     auto* any = reinterpret_cast<std::any*>(addr);
     YSM_ASSERT(
         any, absl::InvalidArgumentError("Cannot cast a null opaque pointer."));
 
-    auto* ptr = std::any_cast<std::shared_ptr<T>>(any);
+    auto* ptr = TryCastOpaquePtr<T>(addr);
     YSM_ASSERT(ptr, absl::InvalidArgumentError(std::format(
                         "Cannot cast opaque type {} to {}", any->type().name(),
                         typeid(std::shared_ptr<T>).name())));

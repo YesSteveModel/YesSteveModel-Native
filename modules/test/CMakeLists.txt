@@ -2,6 +2,8 @@ project(ysm-test CXX)
 
 file(GLOB_RECURSE test_code_files CONFIGURE_DEPENDS src/*.cpp src/*.cc)
 add_executable(ysm-test ${test_code_files})
+file(GLOB physics_tests CONFIGURE_DEPENDS ../physics/test/*.cc)
+target_sources(ysm-test PRIVATE ${physics_tests})
 unset(test_code_files)
 set_property(TARGET ysm-test PROPERTY CXX_STANDARD 23)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
@@ -9,6 +11,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     set_source_files_properties(src/legacy_historical_decoder_test.cc PROPERTIES COMPILE_OPTIONS "/bigobj")
 endif ()
 target_include_directories(ysm-test PRIVATE
+        ../physics/src
         ../legacy/src
         ../lib-jni/src)
 target_compile_definitions(ysm-test PRIVATE
@@ -20,6 +23,9 @@ target_link_libraries(ysm-test PRIVATE
         ysm-proto
         ysm-core
         ysm-gfx-internal
+        ysm-physics
+        Jolt::Jolt
+        mimalloc-static
         ysm-codec
         ysm-java
         ysm-storage

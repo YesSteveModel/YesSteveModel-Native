@@ -23,6 +23,7 @@ pinned sources in `third-party/*/conandata.yml`.
 | [cpu_features](https://github.com/google/cpu_features) | v0.11.0 | Apache-2.0 |  |
 | [Crypto++](https://github.com/weidai11/cryptopp) | CRYPTOPP_8_9_0 | BSL-1.0 AND BSD-3-Clause | Includes public-domain portions. The [cryptopp-cmake wrapper at CRYPTOPP_8_9_0](https://github.com/abdes/cryptopp-cmake) is BSD-3-Clause. |
 | [JNI headers](third-party/jni/src) | local snapshot | [GPL-2.0-only WITH Classpath-exception-2.0](third-party/jni/src/jni.h) | `8.0.0` is a local recipe label; the exact upstream revision is not recorded. The headers contain license notices, but the standalone GPL and Classpath Exception texts are not stored in this repository. |
+| [Jolt Physics](https://github.com/jrouwe/JoltPhysics) | v5.7.0 | MIT | The static package includes the upstream [license](https://github.com/jrouwe/JoltPhysics/blob/v5.7.0/LICENSE). |
 | [libavif](https://github.com/AOMediaCodec/libavif) | v1.4.2 | BSD-2-Clause |  |
 | [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo) | 3.2.0 | [IJG](https://github.com/libjpeg-turbo/libjpeg-turbo/blob/c85e6b905bf237038faa936dab160ebfc5da0344/LICENSE.md) AND BSD-3-Clause | See the upstream [IJG notice](https://github.com/libjpeg-turbo/libjpeg-turbo/blob/c85e6b905bf237038faa936dab160ebfc5da0344/README.ijg); its binary attribution requirements apply to distributions that include this code. |
 | [libspng](https://github.com/randy408/libspng) | v0.7.4 | BSD-2-Clause |  |

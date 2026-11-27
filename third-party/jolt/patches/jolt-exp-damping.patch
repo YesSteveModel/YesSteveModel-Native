@@ -1,0 +1,15 @@
+diff --git a/Jolt/Physics/Body/MotionProperties.inl b/Jolt/Physics/Body/MotionProperties.inl
+index 5b6abc3..5ea1066 100644
+--- a/Jolt/Physics/Body/MotionProperties.inl
++++ b/Jolt/Physics/Body/MotionProperties.inl
+@@ -140,8 +140,8 @@ void MotionProperties::ApplyForceTorqueAndDragInternal(QuatArg inBodyRotation, V
+ 	// Solution: v(t) = v(0) * e^(-c * t) or v2 = v1 * e^(-c * dt)
+ 	// Taylor expansion of e^(-c * dt) = 1 - c * dt + ...
+ 	// Since dt is usually in the order of 1/60 and c is a low number too this approximation is good enough
+-	mLinearVelocity *= max(0.0f, 1.0f - mLinearDamping * inDeltaTime);
+-	mAngularVelocity *= max(0.0f, 1.0f - mAngularDamping * inDeltaTime);
++	mLinearVelocity *= std::exp(-mLinearDamping * inDeltaTime);
++	mAngularVelocity *= std::exp(-mAngularDamping * inDeltaTime);
+ 
+ 	// Clamp velocities
+ 	ClampLinearVelocity();

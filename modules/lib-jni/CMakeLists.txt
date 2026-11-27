@@ -54,6 +54,7 @@ endif ()
 target_link_libraries(ysm-lib-jni PRIVATE
         ysm-core
         ysm-gfx
+        ysm-physics
         ysm-codec
         ysm-java
         ysm-storage

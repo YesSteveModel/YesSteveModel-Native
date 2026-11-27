@@ -9,6 +9,7 @@ function(ysm_import pkg_name)
 endfunction()
 
 ysm_import(mimalloc mimalloc-static)
+ysm_import(Jolt Jolt::Jolt)
 ysm_import(SQLiteCpp SQLiteCpp::SQLiteCpp SQLiteCpp::SQLite3)
 ysm_import(absl)
 ysm_import(zlib-ng zlib-ng-static)

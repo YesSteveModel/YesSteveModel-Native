@@ -1,0 +1,39 @@
+// SPDX-License-Identifier: CC0-1.0
+syntax = "proto3";
+
+package mixel.asset.model.data;
+
+// struct_pb 要求所有 repeated scalar 为 packed
+
+message CubeLegacy {
+  uint32 faceCount = 1;
+  repeated float pos = 2 [packed = true];
+  repeated uint32 pos_indices = 3 [packed = true];
+  repeated float uv = 4 [packed = true];
+  repeated uint32 uv_indices = 5 [packed = true];
+  repeated float normal = 6 [packed = true];
+}
+
+message Cubes {
+  repeated CubeLegacy cubes_legacy = 1;  // 兼容旧版模型格式
+}
+
+message Bone {
+  string name = 1;
+  optional string parent = 2;
+  repeated float pivot = 3 [packed = true];
+  repeated float rotate = 4 [packed = true];
+  optional bool debug = 5;
+  optional uint32 cubeCount = 6;
+}
+
+message GeoProperties {
+  float texture_height = 1;
+  float texture_width = 2;
+}
+
+message GeoModel {
+  repeated Bone bones = 1;
+  GeoProperties properties = 2;
+  bytes cubes = 3;
+}

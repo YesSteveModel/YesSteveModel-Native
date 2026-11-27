@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <vector>
 #include <cassert>
@@ -60,6 +61,9 @@ class PoseStack {
 
     template <typename SimdTag>
     void RotateZYX(SimdTag tag, float x, float y, float z) noexcept;
+
+    template <typename SimdTag>
+    void RotateQuat(SimdTag tag, const std::array<float, 4>& unit_xyzw) noexcept;
 
     template <typename SimdTag>
     void Scale(SimdTag tag, float x, float y, float z) noexcept;

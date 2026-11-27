@@ -8,6 +8,7 @@
 
 #include <bitpack.h>
 #include <log.h>
+#include <physics/runtime.h>
 
 #include "cpu.h"
 #include "device_quality.h"
@@ -89,6 +90,7 @@ YSM_JNI_ENTRY("Lcom/elfmcys/ysm/natives/NativeRuntime;nInitialize(J)J",
     }
 
     YSM_RETURN_IF_ERROR(ConfigureLogLevel(static_cast<int>(log_level)));
+    physics::InitializeRuntime();
     g_initialized_java_config = canonical_java_config;
     YSM_LOG(INFO,
             "Native runtime initialized: log level {}, tracy {}, debug logging {}",

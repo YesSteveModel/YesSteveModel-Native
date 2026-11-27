@@ -305,7 +305,12 @@ Ref<jobjectArray> ObjectArray(JNIEnv_* env, jclass type, jsize size, auto&& func
              YSM_ASSERT(slice_length >= 0 &&    \
                             static_cast<size_t>(slice_length) <= remaining,    \
                         absl::InvalidArgumentError("Invalid array length"sv));    \
+             return PinValidatedRange(env, buf, offset, slice_length);    \
+         }    \
          \
+         /* The caller has already checked this range against this array's length. */    \
+         static absl::StatusOr<Critical##NAME##Array> PinValidatedRange(    \
+             JNIEnv_* env, TYPE##Array buf, jint offset, jint slice_length) noexcept {    \
              void* mem;    \
              if (slice_length > 0) [[likely]] {    \
                  jboolean is_copy = false;    \

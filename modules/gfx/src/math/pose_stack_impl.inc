@@ -14,6 +14,17 @@
 YSM_FAST_MATH_BEGIN
 
 namespace ysm::gfx::math {
+namespace {
+YSM_SIMD_TARGET
+YSM_INLINE void ApplyRotation(YSM_SIMD_TAG tag, PoseStack::Pose& current,
+                              const mat4 rotation4) noexcept {
+    mat3 rotation;
+    glm_mat4_pick3(rotation4, rotation);
+    Mat4Mul(tag, current.pose, rotation4, current.pose);
+    glm_mat3_mul(current.normal, rotation, current.normal);
+}
+}  // namespace
+
 template <>
 YSM_SIMD_TARGET
 void PoseStack::RotateZYX<YSM_SIMD_TAG>(YSM_SIMD_TAG tag, float x, float y, float z) noexcept {
@@ -21,15 +32,26 @@ void PoseStack::RotateZYX<YSM_SIMD_TAG>(YSM_SIMD_TAG tag, float x, float y, floa
         return;
     }
     vec3 angles{x, y, z};
-    auto& current = poses_[pose_index_];
     mat4 rotation4;
-    mat3 rotation;
     EulerZYX(tag, angles, rotation4);
-    // glm_euler_zyx(angles, rotation4);
-    glm_mat4_pick3(rotation4, rotation);
+    ApplyRotation(tag, poses_[pose_index_], rotation4);
+}
 
-    Mat4Mul(tag, current.pose, rotation4, current.pose);
-    glm_mat3_mul(current.normal, rotation, current.normal);
+template <>
+YSM_SIMD_TARGET
+void PoseStack::RotateQuat<YSM_SIMD_TAG>(
+    YSM_SIMD_TAG tag, const std::array<float, 4>& unit_xyzw) noexcept {
+    const auto [x, y, z, w] = unit_xyzw;
+    const float xx = 2 * x * x, yy = 2 * y * y, zz = 2 * z * z;
+    const float xy = 2 * x * y, yz = 2 * y * z, zx = 2 * z * x;
+    const float wx = 2 * w * x, wy = 2 * w * y, wz = 2 * w * z;
+    alignas(64) const mat4 rotation{
+        {1 - yy - zz, xy + wz, zx - wy, 0},
+        {xy - wz, 1 - xx - zz, yz + wx, 0},
+        {zx + wy, yz - wx, 1 - xx - yy, 0},
+        {0, 0, 0, 1},
+    };
+    ApplyRotation(tag, poses_[pose_index_], rotation);
 }
 
 template <>

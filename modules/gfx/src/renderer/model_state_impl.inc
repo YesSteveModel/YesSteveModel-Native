@@ -32,9 +32,12 @@ bool IsFinite(YSM_SIMD_TAG tag, std::span<const float> values) noexcept {
         values, [](float value) { return std::isfinite(value); });
 }
 
+template <bool kHasPhysics>
 YSM_SIMD_TARGET
 void ApplyLocalState(YSM_SIMD_TAG tag, const bake::BakedModelBones::BoneInfo& bone,
-                     const BoneAttribute& attribute, math::PoseStack& pose_stack) {
+                     const BoneAttribute& attribute, math::PoseStack& pose_stack,
+                     size_t bone_index, std::span<const BonePhysicsDelta> physics_deltas,
+                     size_t& delta_cursor) {
     pose_stack.Translate(tag, (bone.pivot[0] - attribute.position[0]) * kModelUnit,
                          (bone.pivot[1] + attribute.position[1]) * kModelUnit,
                          (bone.pivot[2] + attribute.position[2]) * kModelUnit);
@@ -42,6 +45,20 @@ void ApplyLocalState(YSM_SIMD_TAG tag, const bake::BakedModelBones::BoneInfo& bo
                          attribute.rotation[2]);
     pose_stack.Scale(tag, attribute.scale[0], attribute.scale[1],
                      attribute.scale[2]);
+    if constexpr (kHasPhysics) {
+        // A pass can skip subtrees that were visible to the main update.
+        while (delta_cursor < physics_deltas.size() &&
+               physics_deltas[delta_cursor].bone_index < bone_index) {
+            ++delta_cursor;
+        }
+        if (delta_cursor < physics_deltas.size() &&
+            physics_deltas[delta_cursor].bone_index == bone_index) {
+            const auto& delta = physics_deltas[delta_cursor++];
+            const auto& [x, y, z] = delta.delta_pos;
+            pose_stack.Translate(tag, x, y, z);
+            pose_stack.RotateQuat(tag, delta.delta_rot);
+        }
+    }
     pose_stack.Translate(tag, -bone.pivot[0] * kModelUnit,
                          -bone.pivot[1] * kModelUnit,
                          -bone.pivot[2] * kModelUnit);
@@ -65,14 +82,21 @@ bool IsPackedInteger(YSM_SIMD_TAG tag, float value,
 
 template <>
 struct ModelState::Extraction<YSM_SIMD_TAG> {
-    template <bool kLocal>
+    YSM_SIMD_TARGET
+    YSM_INLINE static math::PoseStack& ThreadPoseStack() {
+        thread_local math::PoseStack stack;
+        return stack;
+    }
+
+    template <bool kLocal, bool kHasPhysics>
     YSM_SIMD_TARGET
     YSM_INLINE static absl::StatusOr<ExtractOutput> Run(
         ModelState& state,
         YSM_SIMD_TAG tag,
         const std::shared_ptr<bake::BakedModel>& baked_model,
         std::span<const BoneAttribute> bone_attributes,
-        size_t locator_capacity, size_t root_index) {
+        size_t locator_capacity, size_t root_index,
+        std::span<const BonePhysicsDelta> physics_deltas) {
         auto& locator_bone_indices_scratch_ = state.locator_bone_indices_scratch_;
         auto& valid_ = state.valid_;
         auto& schedule_valid_ = state.schedule_valid_;
@@ -123,12 +147,12 @@ struct ModelState::Extraction<YSM_SIMD_TAG> {
         size_t bone_index_count = 0;
         bool bone_indices_unchanged = true;
 
-        thread_local math::PoseStack local_pose_stack;
-        auto& pose_stack = local_pose_stack;
+        auto& pose_stack = ThreadPoseStack();
         pose_stack.PopPose(0);
         pose_stack.Reserve(bone_count + 1);
 
         uint32_t locator_count = 0;
+        size_t delta_cursor = 0;
         for (size_t bone_index = begin; bone_index < end;) {
             const auto& bone = bones.list[bone_index];
             const auto& attribute = bone_attributes[bone_index];
@@ -155,7 +179,8 @@ struct ModelState::Extraction<YSM_SIMD_TAG> {
                            std::trunc(locator_sequence) == locator_sequence,
                        absl::InvalidArgumentError("Invalid locator sequence."));
 
-            ApplyLocalState(tag, bone, attribute, pose_stack);
+            ApplyLocalState<kHasPhysics>(tag, bone, attribute, pose_stack, bone_index,
+                                         physics_deltas, delta_cursor);
             const auto& pose = pose_stack.Last();
             if (!IsFinite(tag, std::span(&pose.pose[0][0], 16)) ||
                 !IsFinite(tag, std::span(&pose.normal[0][0], 9))) {
@@ -228,8 +253,22 @@ absl::StatusOr<ModelState::ExtractOutput> ModelState::Extract<YSM_SIMD_TAG>(
     YSM_SIMD_TAG tag,
     const std::shared_ptr<bake::BakedModel>& baked_model,
     std::span<const BoneAttribute> bone_attributes, size_t locator_capacity) {
-    return Extraction<YSM_SIMD_TAG>::Run<false>(
-        *this, tag, baked_model, bone_attributes, locator_capacity, 0);
+    return Extraction<YSM_SIMD_TAG>::Run<false, false>(
+        *this, tag, baked_model, bone_attributes, locator_capacity, 0, {});
+}
+
+template <>
+YSM_SIMD_TARGET
+absl::StatusOr<ModelState::ExtractOutput> ModelState::Extract<YSM_SIMD_TAG>(
+    YSM_SIMD_TAG tag,
+    const std::shared_ptr<bake::BakedModel>& baked_model,
+    std::span<const BoneAttribute> bone_attributes, size_t locator_capacity,
+    std::span<const BonePhysicsDelta> physics_deltas) {
+    if (physics_deltas.empty()) {
+        return Extract(tag, baked_model, bone_attributes, locator_capacity);
+    }
+    return Extraction<YSM_SIMD_TAG>::Run<false, true>(
+        *this, tag, baked_model, bone_attributes, locator_capacity, 0, physics_deltas);
 }
 
 template <>
@@ -239,8 +278,8 @@ absl::StatusOr<ModelState::ExtractOutput> ModelState::ExtractSubtree<YSM_SIMD_TA
     const std::shared_ptr<bake::BakedModel>& baked_model,
     std::span<const BoneAttribute> bone_attributes, size_t locator_capacity,
     size_t root_index) {
-    return Extraction<YSM_SIMD_TAG>::Run<true>(
-        *this, tag, baked_model, bone_attributes, locator_capacity, root_index);
+    return Extraction<YSM_SIMD_TAG>::Run<true, false>(
+        *this, tag, baked_model, bone_attributes, locator_capacity, root_index, {});
 }
 }  // namespace ysm::gfx::renderer
 

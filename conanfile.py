@@ -22,6 +22,7 @@ class YsmConan(ConanFile):
     def requirements(self):
         self.requires("sqlitecpp/3.4.0@ysm/stable")
         self.requires("mimalloc/3.6.0@ysm/stable")
+        self.requires("jolt/5.7.0@ysm/stable")
         self.requires("cpu_features/0.11.0@ysm/stable")
         self.requires("abseil/20260817.0@ysm/stable")
         self.requires("zlib-ng/2.3.3@ysm/stable")

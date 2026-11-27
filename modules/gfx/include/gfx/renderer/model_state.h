@@ -13,6 +13,7 @@
 #include "gfx/bake/baked_model.h"
 #include "bone_attribute.h"
 #include "color.h"
+#include "physics_delta.h"
 #include "schedule.h"
 
 namespace ysm::gfx::renderer {
@@ -59,6 +60,14 @@ class ModelState {
         const std::shared_ptr<bake::BakedModel>& baked_model,
         std::span<const BoneAttribute> bone_attributes,
         size_t locator_capacity);
+
+    // Corrections are in strictly increasing baked bone order.
+    template <typename SimdTag>
+    absl::StatusOr<ExtractOutput> Extract(
+        SimdTag tag,
+        const std::shared_ptr<bake::BakedModel>& baked_model,
+        std::span<const BoneAttribute> bone_attributes,
+        size_t locator_capacity, std::span<const BonePhysicsDelta> physics_deltas);
 
     template <typename SimdTag>
     absl::StatusOr<ExtractOutput> ExtractSubtree(

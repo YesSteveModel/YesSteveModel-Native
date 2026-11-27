@@ -1,0 +1,67 @@
+diff --git a/Jolt/Core/Memory.cpp b/Jolt/Core/Memory.cpp
+index 6e642c4..c1dec09 100644
+--- a/Jolt/Core/Memory.cpp
++++ b/Jolt/Core/Memory.cpp
+@@ -4,10 +4,7 @@
+ 
+ #include <Jolt/Jolt.h>
+ 
+-JPH_SUPPRESS_WARNINGS_STD_BEGIN
+-#include <cstdlib>
+-JPH_SUPPRESS_WARNINGS_STD_END
+-#include <stdlib.h>
++#include <mimalloc.h>
+ 
+ JPH_NAMESPACE_BEGIN
+ 
+@@ -22,45 +19,30 @@ JPH_NAMESPACE_BEGIN
+ JPH_ALLOC_SCOPE void *JPH_ALLOC_FN(Allocate)(size_t inSize)
+ {
+ 	JPH_ASSERT(inSize > 0);
+-	return malloc(inSize);
++	return mi_malloc(inSize);
+ }
+ 
+ JPH_ALLOC_SCOPE void *JPH_ALLOC_FN(Reallocate)(void *inBlock, [[maybe_unused]] size_t inOldSize, size_t inNewSize)
+ {
+ 	JPH_ASSERT(inNewSize > 0);
+-	return realloc(inBlock, inNewSize);
++	return mi_realloc(inBlock, inNewSize);
+ }
+ 
+ JPH_ALLOC_SCOPE void JPH_ALLOC_FN(Free)(void *inBlock)
+ {
+-	free(inBlock);
++	mi_free(inBlock);
+ }
+ 
+ JPH_ALLOC_SCOPE void *JPH_ALLOC_FN(AlignedAllocate)(size_t inSize, size_t inAlignment)
+ {
+ 	JPH_ASSERT(inSize > 0 && inAlignment > 0);
+ 
+-#if defined(JPH_PLATFORM_WINDOWS)
+-	// Microsoft doesn't implement posix_memalign
+-	return _aligned_malloc(inSize, inAlignment);
+-#else
+-	void *block = nullptr;
+-	JPH_SUPPRESS_WARNING_PUSH
+-	JPH_GCC_SUPPRESS_WARNING("-Wunused-result")
+-	JPH_CLANG_SUPPRESS_WARNING("-Wunused-result")
+-	posix_memalign(&block, inAlignment, inSize);
+-	JPH_SUPPRESS_WARNING_POP
+-	return block;
+-#endif
++	return mi_malloc_aligned(inSize, inAlignment);
+ }
+ 
+ JPH_ALLOC_SCOPE void JPH_ALLOC_FN(AlignedFree)(void *inBlock)
+ {
+-#if defined(JPH_PLATFORM_WINDOWS)
+-	_aligned_free(inBlock);
+-#else
+-	free(inBlock);
+-#endif
++	mi_free(inBlock);
+ }
+ 
+ #ifndef JPH_DISABLE_CUSTOM_ALLOCATOR

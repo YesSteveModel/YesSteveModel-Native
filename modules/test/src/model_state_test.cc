@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <magic_enum_switch.hpp>
 
 #include "buffer.h"
 #include "cpu.h"
@@ -229,6 +230,133 @@ TEST(ModelStateTest, ExtractsPoseLocatorsAndReusesSchedule) {
     ASSERT_TRUE(switched.ok()) << switched.status();
     EXPECT_TRUE(switched->schedule_updated);
     EXPECT_EQ(state.Model(), other_model);
+}
+
+TEST(ModelStateTest, ComposesScaledParentAndChildDeltasAtTheirOwnPivots) {
+    using gfx::renderer::BonePhysicsDelta;
+    InitCpuInfo();
+    constexpr float half_sqrt_two = std::numbers::sqrt2_v<float> / 2;
+    const std::array deltas{
+        BonePhysicsDelta{1, 0, {0, 0.25f, 0}, {0, 0, half_sqrt_two, half_sqrt_two}},
+        BonePhysicsDelta{2, 0, {0.5f, 0, 0}, {half_sqrt_two, 0, 0, half_sqrt_two}},
+    };
+    auto model = MakeModel();
+    auto attributes = MakeAttributes();
+    attributes[0].position[0] = 16;
+    gfx::renderer::ModelState state;
+    for (const float scale : {0.5f, 2.0f}) {
+        std::ranges::fill(attributes[1].scale, scale);
+        const auto output = magic_enum::enum_switch([&](auto type) {
+            return state.Extract(simd::Tag<type>{}, model, attributes, 4, deltas);
+        }, simd::kSupported);
+        ASSERT_TRUE(output.ok()) << output.status();
+        ASSERT_EQ(output->locator_count, 1);
+        EXPECT_EQ(state.StagedLocatorBoneIndices(1)[0], 2);
+
+        // Rz(90) * Rx(90) sends X to Y, Y to Z, and Z to X.
+        const mat4 expected{
+            {0, scale, 0, 0}, {0, 0, scale, 0}, {scale, 0, 0, 0},
+            {-scale, -0.25f * scale, -scale, 1},
+        };
+        const auto& child = state.PoseView().bone_poses[2];
+        for (size_t c = 0; c < 4; ++c) {
+            for (size_t r = 0; r < 4; ++r) {
+                EXPECT_NEAR(child.pose[c][r], expected[c][r], 1e-5f);
+            }
+        }
+        for (size_t c = 0; c < 3; ++c) {
+            for (size_t r = 0; r < 3; ++r) {
+                EXPECT_NEAR(child.normal[c][r], expected[c][r] / scale, 1e-5f);
+            }
+        }
+    }
+}
+
+TEST(ModelStateTest, ObservesSameDeltaAgainstPassPoseAndDrawAttributes) {
+    auto model = MakeModel();
+    auto attributes = MakeAttributes();
+    constexpr float half_sqrt_two = std::numbers::sqrt2_v<float> / 2;
+    const std::array deltas{gfx::renderer::BonePhysicsDelta{
+        1, 0, {}, {0, 0, half_sqrt_two, half_sqrt_two}}};
+    gfx::renderer::ModelState state;
+    auto main = state.Extract(kGenericTag, model, attributes, 4, deltas);
+    ASSERT_TRUE(main.ok()) << main.status();
+    EXPECT_EQ(main->vertex_count, 8);
+    EXPECT_NEAR(state.PoseView().bone_poses[1].pose[3][0], 1, 1e-5f);
+    EXPECT_NEAR(state.PoseView().bone_poses[1].normal[0][1], 1, 1e-5f);
+
+    attributes[0].position[0] = 16;
+    attributes[0].rotation[1] = std::numbers::pi_v<float> / 2;
+    attributes[1].cubes_hidden = 1;
+    attributes[2].color = 0x123456;
+    attributes[2].transparency_glow = 0x0934;
+    auto observed = state.Extract(kGenericTag, model, attributes, 4, deltas);
+    ASSERT_TRUE(observed.ok()) << observed.status();
+    EXPECT_EQ(observed->vertex_count, 4);
+    ASSERT_EQ(observed->locator_count, 1);
+    EXPECT_EQ(state.StagedLocatorBoneIndices(1)[0], 2);
+    ASSERT_TRUE(std::ranges::equal(state.PoseView().render_bone_indices,
+                                   std::array<uint16_t, 1>{3}));
+    const auto& child = state.PoseView().bone_poses[2];
+    EXPECT_NEAR(child.pose[3][0], -1, 1e-5f);
+    EXPECT_NEAR(child.pose[3][1], -1, 1e-5f);
+    EXPECT_NEAR(child.pose[3][2], -1, 1e-5f);
+    EXPECT_NEAR(child.normal[1][2], 1, 1e-5f);
+    EXPECT_EQ(child.color.packed, 0x34123456u);
+    EXPECT_EQ(child.glowing, 9);
+}
+
+TEST(ModelStateTest, NonuniformChildAndLocatorInheritLastActiveParent) {
+    auto model = MakeModel();
+    auto attributes = MakeAttributes();
+    attributes[1].scale[1] = 2;
+    const float angle = std::numbers::pi_v<float> / 6;
+    const std::array deltas{gfx::renderer::BonePhysicsDelta{
+        0, 0, {}, {0, 0, std::sin(angle / 2), std::cos(angle / 2)}}};
+    gfx::renderer::ModelState state;
+    auto output = state.Extract(kGenericTag, model, attributes, 4, deltas);
+    ASSERT_TRUE(output.ok()) << output.status();
+    ASSERT_EQ(output->locator_count, 1);
+    EXPECT_EQ(state.StagedLocatorBoneIndices(1)[0], 2);
+    const auto poses = state.PoseView().bone_poses;
+    for (size_t i : {1, 2}) {
+        EXPECT_NEAR(poses[i].pose[1][0], -2 * std::sin(angle), 1e-5f);
+        EXPECT_NEAR(poses[i].pose[1][1], 2 * std::cos(angle), 1e-5f);
+        EXPECT_NEAR(poses[i].normal[1][0], -0.5f * std::sin(angle), 1e-5f);
+    }
+    EXPECT_NEAR(poses[3].pose[1][0], -std::sin(angle), 1e-5f);
+
+    output = state.Extract(kGenericTag, model, attributes, 4, {});
+    ASSERT_TRUE(output.ok()) << output.status();
+    EXPECT_FALSE(output->schedule_updated);
+    EXPECT_EQ(output->vertex_count, 8);
+    EXPECT_EQ(output->locator_count, 1);
+    EXPECT_FLOAT_EQ(state.PoseView().bone_poses[2].pose[1][0], 0);
+    EXPECT_FLOAT_EQ(state.PoseView().bone_poses[2].pose[1][1], 2);
+}
+
+TEST(ModelStateTest, SparseCursorSkipsHiddenDeltasAndStillEmitsLaterLocators) {
+    using gfx::renderer::BonePhysicsDelta;
+    auto model = MakeModel();
+    auto attributes = MakeAttributes();
+    attributes[1].children_hidden = 1;
+    attributes[3].locator_sequence = 4;
+    const std::array deltas{
+        BonePhysicsDelta{2, 0, {1, 0, 0}, {0, 0, 0, 1}},
+        BonePhysicsDelta{3, 0, {0, 2, 0}, {0, 0, 0, 1}},
+    };
+    gfx::renderer::ModelState state;
+    for (size_t count : {1, 2}) {
+        const auto output = state.Extract(kGenericTag, model, attributes, 4,
+                                          std::span(deltas).first(count));
+        ASSERT_TRUE(output.ok()) << output.status();
+        EXPECT_EQ(output->vertex_count, 8);
+        ASSERT_EQ(output->locator_count, 1);
+        EXPECT_EQ(state.StagedLocatorBoneIndices(1)[0], 3);
+        const auto& sibling = state.PoseView().bone_poses[3];
+        EXPECT_FLOAT_EQ(sibling.pose[3][0], 0);
+        EXPECT_FLOAT_EQ(sibling.pose[3][1], count == 2 ? 2 : 0);
+    }
 }
 
 TEST(ModelStateTest, LocalRootIgnoresAllExternalAncestorAttributes) {
